@@ -1,5 +1,6 @@
 package com.example.myfakegps
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.location.Criteria
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var locationManager: LocationManager
     private lateinit var mapView: MapView
+    private lateinit var editSearch: EditText
     private lateinit var editDistance: EditText
     private lateinit var textStatus: TextView
 
@@ -52,53 +54,80 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 初始化 OSMDroid
-        Configuration.getInstance().userAgentValue = packageName
+        // 設定修復 OpenStreetMap 403 存取封鎖的 User-Agent 標頭
+        Configuration.getInstance().userAgentValue = "MyFakeGPSApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
 
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
-        val editSearch = findViewById<EditText>(R.id.editSearch)
+        editSearch = findViewById(R.id.editSearch)
+        editDistance = findViewById(R.id.editDistance)
+        textStatus = findViewById(R.id.textStatus)
+        mapView = findViewById(R.id.mapView)
+
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
+        val btnPaste = findViewById<Button>(R.id.btnPaste)
         val btnOpenDev = findViewById<Button>(R.id.btnOpenDevSettings)
         val btnOpenAppInfo = findViewById<Button>(R.id.btnOpenAppInfo)
+
         val btnNorth = findViewById<Button>(R.id.btnNorth)
         val btnSouth = findViewById<Button>(R.id.btnSouth)
         val btnEast = findViewById<Button>(R.id.btnEast)
         val btnWest = findViewById<Button>(R.id.btnWest)
 
-        editDistance = findViewById(R.id.editDistance)
-        textStatus = findViewById(R.id.textStatus)
-        mapView = findViewById(R.id.mapView)
-
-        // 初始化地圖設定
+        // 初始化地圖
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(17.0)
 
+        // 輸入框點擊自動全選
+        editSearch.setOnClickListener { editSearch.selectAll() }
+
+        // 一鍵貼上按鈕
+        btnPaste.setOnClickListener {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if (clipboard.hasPrimaryClip()) {
+                val item = clipboard.primaryClip?.getItemAt(0)
+                val text = item?.text?.toString()
+                if (!text.isNullOrEmpty()) {
+                    editSearch.setText(text)
+                    editSearch.selectAll()
+                    Toast.makeText(this, "已貼上剪貼簿內容", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "剪貼簿無文字", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "剪貼簿為空", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 設定 4 組我的最愛按鈕 (點擊帶入，長按儲存)
+        setupFavorite(findViewById(R.id.btnFav1), "fav_1", "CCM9+QMH Santorini")
+        setupFavorite(findViewById(R.id.btnFav2), "fav_2", "台北 101")
+        setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔")
+        setupFavorite(findViewById(R.id.btnFav4), "fav_4", "埃菲爾鐵塔")
+
         // 捷徑 1：開啟開發者選項
         btnOpenDev.setOnClickListener {
             try {
-                val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
             } catch (e: Exception) {
                 Toast.makeText(this, "無法開啟開發者選項: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // 捷徑 2：開啟應用程式資訊 (可點擊設定電池用量)
+        // 捷徑 2：開啟應用程式資訊 (設定電池用量)
         btnOpenAppInfo.setOnClickListener {
             try {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.fromParts("package", packageName, null)
-                }
-                startActivity(intent)
+                })
             } catch (e: Exception) {
                 Toast.makeText(this, "無法開啟應用程式資訊: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // 搜尋定位按鈕
+        // 搜尋與定位按鈕
         btnSet.setOnClickListener {
             if (isMocking) {
                 stopMocking()
@@ -157,27 +186,55 @@ class MainActivity : AppCompatActivity() {
             }.start()
         }
 
-        // 東西南北微調移動按鈕
+        // 十字按鈕微調移動
         btnNorth.setOnClickListener { moveLocation(0.0, getDistanceStep()) }
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
     }
 
+    // 設定「我的最愛」按鈕邏輯 (點擊帶入，長按覆蓋)
+    private fun setupFavorite(button: Button, slotKey: String, defaultValue: String) {
+        val prefs = getSharedPreferences("MyFakeGPSFavs", Context.MODE_PRIVATE)
+        var savedVal = prefs.getString(slotKey, defaultValue) ?: defaultValue
+
+        val updateButtonLabel = {
+            val displayLabel = if (savedVal.length > 7) savedVal.take(6) + "…" else savedVal
+            button.text = "★ $displayLabel"
+        }
+
+        updateButtonLabel()
+
+        button.setOnClickListener {
+            editSearch.setText(savedVal)
+            editSearch.selectAll()
+            Toast.makeText(this, "已帶入: $savedVal", Toast.LENGTH_SHORT).show()
+        }
+
+        button.setOnLongClickListener {
+            val currentText = editSearch.text.toString().trim()
+            if (currentText.isNotEmpty()) {
+                savedVal = currentText
+                prefs.edit().putString(slotKey, savedVal).apply()
+                updateButtonLabel()
+                Toast.makeText(this, "已長按儲存至最愛: $savedVal", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "請先輸入地名再長按儲存", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+    }
+
     private fun getDistanceStep(): Double {
         return editDistance.text.toString().toDoubleOrNull() ?: 1.0
     }
 
-    // 依據距離 (公尺) 精確計算球面經緯度位移
     private fun moveLocation(deltaXMeters: Double, deltaYMeters: Double) {
         val lat = currentLat ?: return
         val lng = currentLng ?: return
 
-        val earthRadius = 6378137.0 // 地球半徑 (公尺)
-
-        // 緯度位移公式
+        val earthRadius = 6378137.0
         val deltaLat = (deltaYMeters / earthRadius) * (180.0 / Math.PI)
-        // 經度位移公式 (根據緯度進行 cos 縮放)
         val deltaLng = (deltaXMeters / (earthRadius * cos(Math.toRadians(lat)))) * (180.0 / Math.PI)
 
         currentLat = lat + deltaLat
@@ -195,7 +252,6 @@ class MainActivity : AppCompatActivity() {
 
         textStatus.text = "模擬中...\n位置: $locationName\n緯度: %.6f, 經度: %.6f".format(lat, lng)
 
-        // 同步更新 OpenStreetMap 與標記點
         val geoPoint = GeoPoint(lat, lng)
         mapView.controller.setCenter(geoPoint)
 
