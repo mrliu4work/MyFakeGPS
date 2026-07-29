@@ -6,6 +6,8 @@ import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.widget.Button
 import android.widget.EditText
@@ -16,6 +18,25 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var locationManager: LocationManager
+    private val handler = Handler(Looper.getMainLooper())
+    private var isMocking = false
+    private var currentLat: Double? = null
+    private var currentLng: Double? = null
+
+    // 同時鎖定 GPS 與 NETWORK 兩個定位通道
+    private val providers = arrayOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+
+    // 每 1 秒持續發送最新假座標的迴圈
+    private val updateRunnable = object : Runnable {
+        override fun run() {
+            if (isMocking && currentLat != null && currentLng != null) {
+                pushLocationToAllProviders(currentLat!!, currentLng!!)
+                handler.postDelayed(this, 1000) // 1000 毫秒 (1 秒) 刷一次
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -24,12 +45,19 @@ class MainActivity : AppCompatActivity() {
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val textStatus = findViewById<TextView>(R.id.textStatus)
 
-        val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providerName = LocationManager.GPS_PROVIDER
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         btnSet.setOnClickListener {
-            val inputText = editSearch.text.toString().trim()
+            // 如果正在模擬中，再次點擊按鈕則「停止模擬」
+            if (isMocking) {
+                stopMocking()
+                btnSet.text = "搜尋並修改定位"
+                textStatus.text = "已停止模擬位置"
+                Toast.makeText(this, "已停止模擬定位", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
+            val inputText = editSearch.text.toString().trim()
             if (inputText.isEmpty()) {
                 Toast.makeText(this, "請輸入搜尋內容", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -37,19 +65,18 @@ class MainActivity : AppCompatActivity() {
 
             textStatus.text = "搜尋定位中..."
 
-            // 使用背景執行緒進行 Geocoder 解析，避免阻塞主執行緒
             Thread {
                 var lat: Double? = null
                 var lng: Double? = null
                 var resolvedName = inputText
 
-                // 1. 判斷是否為直接輸入經緯度格式，例如 "25.0339, 121.5640" 或 "25.0339 121.5640"
+                // 判斷是否為經緯度格式
                 val coords = inputText.split(Regex("[,\\s]+"))
                 if (coords.size == 2 && coords[0].toDoubleOrNull() != null && coords[1].toDoubleOrNull() != null) {
                     lat = coords[0].toDouble()
                     lng = coords[1].toDouble()
                 } else {
-                    // 2. 使用 Android 內建 Geocoder 解析 Plus Code 或 地名 (例如 "CCM9+QMH Santorini")
+                    // Geocoder 解析地名或 Plus Code
                     try {
                         val geocoder = Geocoder(this@MainActivity, Locale.getDefault())
                         val addresses = geocoder.getFromLocationName(inputText, 1)
@@ -64,61 +91,89 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // 回到 UI 執行緒更新畫面與設定位置
                 runOnUiThread {
                     if (lat != null && lng != null) {
-                        val success = applyMockLocation(locationManager, providerName, lat!!, lng!!)
-                        if (success) {
-                            textStatus.text = "修改成功！\n目標: $resolvedName\n經度: $lng, 緯度: $lat"
-                            Toast.makeText(this@MainActivity, "定位已更新！", Toast.LENGTH_SHORT).show()
-                        } else {
-                            textStatus.text = "失敗：請確認已開啟開發者選項中的模擬位置設定"
-                        }
+                        currentLat = lat
+                        currentLng = lng
+                        startMocking()
+
+                        btnSet.text = "停止模擬定位"
+                        textStatus.text = "持續模擬中...\n目標: $resolvedName\n經度: $lng, 緯度: $lat"
+                        Toast.makeText(this@MainActivity, "定位鎖定成功，每秒持續廣播中！", Toast.LENGTH_SHORT).show()
                     } else {
                         textStatus.text = "無法解析該地點或 Plus Code，請重新檢查輸入"
-                        Toast.makeText(this@MainActivity, "找不到地點，請確認網路連線或字串", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "找不到地點，請確認輸入內容", Toast.LENGTH_LONG).show()
                     }
                 }
             }.start()
         }
     }
 
-    private fun applyMockLocation(
-        locationManager: LocationManager,
-        providerName: String,
-        lat: Double,
-        lng: Double
-    ): Boolean {
-        return try {
+    private fun startMocking() {
+        stopMocking() // 確保先清理舊的 Provider
+        setupTestProviders()
+        isMocking = true
+        handler.post(updateRunnable)
+    }
+
+    private fun stopMocking() {
+        isMocking = false
+        handler.removeCallbacks(updateRunnable)
+        removeTestProviders()
+    }
+
+    private fun setupTestProviders() {
+        for (provider in providers) {
             try {
-                locationManager.removeTestProvider(providerName)
+                locationManager.removeTestProvider(provider)
             } catch (e: Exception) {
                 // 忽略
             }
-
-            locationManager.addTestProvider(
-                providerName,
-                false, false, false, false,
-                true, true, true,
-                Criteria.POWER_LOW,
-                Criteria.ACCURACY_FINE
-            )
-            locationManager.setTestProviderEnabled(providerName, true)
-
-            val mockLocation = Location(providerName).apply {
-                latitude = lat
-                longitude = lng
-                altitude = 0.0
-                time = System.currentTimeMillis()
-                accuracy = 5f
-                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+            try {
+                locationManager.addTestProvider(
+                    provider,
+                    false, false, false, false,
+                    true, true, true,
+                    Criteria.POWER_LOW,
+                    Criteria.ACCURACY_FINE
+                )
+                locationManager.setTestProviderEnabled(provider, true)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-
-            locationManager.setTestProviderLocation(providerName, mockLocation)
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
+    }
+
+    private fun removeTestProviders() {
+        for (provider in providers) {
+            try {
+                locationManager.removeTestProvider(provider)
+            } catch (e: Exception) {
+                // 忽略
+            }
+        }
+    }
+
+    private fun pushLocationToAllProviders(lat: Double, lng: Double) {
+        for (provider in providers) {
+            try {
+                val mockLocation = Location(provider).apply {
+                    latitude = lat
+                    longitude = lng
+                    altitude = 0.0
+                    time = System.currentTimeMillis()
+                    accuracy = 5f
+                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                }
+                locationManager.setTestProviderLocation(provider, mockLocation)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopMocking()
     }
 }
