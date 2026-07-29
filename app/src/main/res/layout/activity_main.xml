@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="32dp"
+    android:gravity="center">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="我的專屬 Fake GPS"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="32dp"/>
+
+    <EditText
+        android:id="@+id/editLatitude"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="請輸入緯度 (Latitude，例如 25.0339)"
+        android:inputType="numberDecimal|numberSigned" />
+
+    <EditText
+        android:id="@+id/editLongitude"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="請輸入經度 (Longitude，例如 121.5640)"
+        android:inputType="numberDecimal|numberSigned"
+        android:layout_marginTop="16dp" />
+
+    <Button
+        android:id="@+id/btnSetLocation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="修改位置！"
+        android:layout_marginTop="32dp" />
+</LinearLayout>
