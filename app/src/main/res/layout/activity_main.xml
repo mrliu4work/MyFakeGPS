@@ -45,21 +45,89 @@
                 android:layout_marginStart="4dp"/>
         </LinearLayout>
 
-        <!-- 搜尋輸入框 -->
+        <!-- 搜尋輸入框 (點擊自動全選) -->
         <EditText
             android:id="@+id/editSearch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="輸入 Plus Code、地名 或 經緯度"
             android:inputType="textMultiLine"
+            android:selectAllOnFocus="true"
             android:lines="2"/>
 
-        <Button
-            android:id="@+id/btnSetLocation"
+        <!-- 貼上與搜尋列 -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="搜尋並修改定位"
-            android:layout_marginTop="8dp" />
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/btnPaste"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📋 貼上"
+                android:textSize="13sp"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/btnSetLocation"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="搜尋並修改定位" />
+        </LinearLayout>
+
+        <!-- 我的最愛區域 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="★ 我的最愛 (點擊帶入，長按覆蓋儲存):"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnFav1"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="2dp"/>
+
+            <Button
+                android:id="@+id/btnFav2"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="2dp"/>
+
+            <Button
+                android:id="@+id/btnFav3"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="2dp"/>
+
+            <Button
+                android:id="@+id/btnFav4"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:textSize="10sp"
+                android:padding="0dp"/>
+        </LinearLayout>
 
         <!-- 移動微調控制區 -->
         <LinearLayout
