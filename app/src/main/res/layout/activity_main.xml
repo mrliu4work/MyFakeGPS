@@ -1,40 +1,154 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp"
-    android:gravity="center_horizontal">
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="MyFakeGPS"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="24dp"/>
-
-    <EditText
-        android:id="@+id/editSearch"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="輸入 Plus Code、地名 或 經緯度\n(例如 CCM9+QMH Santorini)"
-        android:inputType="textMultiLine"
-        android:lines="2"/>
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <Button
-        android:id="@+id/btnSetLocation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="搜尋並修改定位"
-        android:layout_marginTop="16dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MyFakeGPS"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="12dp"/>
 
-    <TextView
-        android:id="@+id/textStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="等待設定中..."
-        android:textSize="14sp"
-        android:gravity="center"
-        android:layout_marginTop="24dp"/>
-</LinearLayout>
+        <!-- 捷徑按鈕區 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btnOpenDevSettings"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="選取模擬位置設定"
+                android:textSize="12sp"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btnOpenAppInfo"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="應用程式電池用量"
+                android:textSize="12sp"
+                android:layout_marginStart="4dp"/>
+        </LinearLayout>
+
+        <!-- 搜尋輸入框 -->
+        <EditText
+            android:id="@+id/editSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="輸入 Plus Code、地名 或 經緯度"
+            android:inputType="textMultiLine"
+            android:lines="2"/>
+
+        <Button
+            android:id="@+id/btnSetLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="搜尋並修改定位"
+            android:layout_marginTop="8dp" />
+
+        <!-- 移動微調控制區 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="移動距離 (公尺): "
+                android:textSize="14sp"/>
+
+            <EditText
+                android:id="@+id/editDistance"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1"
+                android:inputType="numberDecimal"
+                android:gravity="center"/>
+        </LinearLayout>
+
+        <!-- 十字方向盤 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/btnNorth"
+                android:layout_width="70dp"
+                android:layout_height="40dp"
+                android:text="北 ▲"
+                android:padding="0dp"
+                android:textSize="12sp"/>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnWest"
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:text="◄ 西"
+                    android:padding="0dp"
+                    android:textSize="12sp"
+                    android:layout_marginEnd="20dp"/>
+
+                <Button
+                    android:id="@+id/btnEast"
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:text="東 ►"
+                    android:padding="0dp"
+                    android:textSize="12sp"
+                    android:layout_marginStart="20dp"/>
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnSouth"
+                android:layout_width="70dp"
+                android:layout_height="40dp"
+                android:text="▼ 南"
+                android:padding="0dp"
+                android:textSize="12sp"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/textStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="等待設定中..."
+            android:textSize="13sp"
+            android:gravity="center"
+            android:layout_marginTop="8dp"/>
+
+        <!-- OpenStreetMap 地圖 -->
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapView"
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:layout_marginTop="12dp"/>
+
+    </LinearLayout>
+</ScrollView>
