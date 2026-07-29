@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var editSearch: EditText
     private lateinit var editDistance: EditText
     private lateinit var textStatus: TextView
+    private lateinit var btnSet: Button
 
     private val handler = Handler(Looper.getMainLooper())
     private var isMocking = false
@@ -65,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         textStatus = findViewById(R.id.textStatus)
         mapView = findViewById(R.id.mapView)
 
-        val btnSet = findViewById<Button>(R.id.btnSetLocation)
+        btnSet = findViewById(R.id.btnSetLocation)
         val btnPaste = findViewById<Button>(R.id.btnPaste)
         val btnOpenDev = findViewById<Button>(R.id.btnOpenDevSettings)
         val btnOpenAppInfo = findViewById<Button>(R.id.btnOpenAppInfo)
@@ -83,25 +84,19 @@ class MainActivity : AppCompatActivity() {
         // 輸入框點擊自動全選
         editSearch.setOnClickListener { editSearch.selectAll() }
 
-        // 一鍵貼上按鈕
+        // 一鍵貼上按鈕：貼上並直接解析搜尋更新座標
         btnPaste.setOnClickListener {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            if (clipboard.hasPrimaryClip()) {
-                val item = clipboard.primaryClip?.getItemAt(0)
-                val text = item?.text?.toString()
-                if (!text.isNullOrEmpty()) {
-                    editSearch.setText(text)
-                    editSearch.selectAll()
-                    Toast.makeText(this, "已貼上剪貼簿內容", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, "剪貼簿無文字", Toast.LENGTH_SHORT).show()
-                }
+            val text = getClipboardText()
+            if (!text.isNullOrEmpty()) {
+                editSearch.setText(text)
+                editSearch.selectAll()
+                performLocationSearch(text)
             } else {
-                Toast.makeText(this, "剪貼簿為空", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "剪貼簿為空或無文字內容", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // 設定 4 組我的最愛按鈕 (點擊帶入，長按儲存)
+        // 設定 4 組我的最愛按鈕 (點擊帶入並自動搜尋定位，長按直接從剪貼簿讀取覆蓋儲存)
         setupFavorite(findViewById(R.id.btnFav1), "fav_1", "CCM9+QMH Santorini")
         setupFavorite(findViewById(R.id.btnFav2), "fav_2", "台北 101")
         setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔")
@@ -127,63 +122,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 搜尋與定位按鈕
+        // 搜尋與定位按鈕 (若正在模擬中點擊則停止)
         btnSet.setOnClickListener {
             if (isMocking) {
                 stopMocking()
                 btnSet.text = "搜尋並修改定位"
                 textStatus.text = "已停止模擬位置"
                 Toast.makeText(this, "已停止模擬定位", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+            } else {
+                val inputText = editSearch.text.toString().trim()
+                performLocationSearch(inputText)
             }
-
-            val inputText = editSearch.text.toString().trim()
-            if (inputText.isEmpty()) {
-                Toast.makeText(this, "請輸入搜尋內容", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            textStatus.text = "搜尋定位中..."
-
-            Thread {
-                var lat: Double? = null
-                var lng: Double? = null
-                var resolvedName = inputText
-
-                val coords = inputText.split(Regex("[,\\s]+"))
-                if (coords.size == 2 && coords[0].toDoubleOrNull() != null && coords[1].toDoubleOrNull() != null) {
-                    lat = coords[0].toDouble()
-                    lng = coords[1].toDouble()
-                } else {
-                    try {
-                        val geocoder = Geocoder(this@MainActivity, Locale.getDefault())
-                        val addresses = geocoder.getFromLocationName(inputText, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            val address = addresses[0]
-                            lat = address.latitude
-                            lng = address.longitude
-                            resolvedName = address.getAddressLine(0) ?: inputText
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-
-                runOnUiThread {
-                    if (lat != null && lng != null) {
-                        currentLat = lat
-                        currentLng = lng
-                        startMocking()
-
-                        btnSet.text = "停止模擬定位"
-                        updateStatusAndMap(resolvedName)
-                        Toast.makeText(this@MainActivity, "定位已更新！", Toast.LENGTH_SHORT).show()
-                    } else {
-                        textStatus.text = "無法解析該地點，請重新檢查"
-                        Toast.makeText(this@MainActivity, "找不到地點，請確認輸入", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }.start()
         }
 
         // 十字按鈕微調移動
@@ -193,7 +142,66 @@ class MainActivity : AppCompatActivity() {
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
     }
 
-    // 設定「我的最愛」按鈕邏輯 (點擊帶入，長按覆蓋)
+    private fun getClipboardText(): String? {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        if (clipboard.hasPrimaryClip()) {
+            val item = clipboard.primaryClip?.getItemAt(0)
+            return item?.text?.toString()?.trim()
+        }
+        return null
+    }
+
+    // 執行地點搜尋、解析與座標更新寫入
+    private fun performLocationSearch(inputText: String) {
+        if (inputText.isEmpty()) {
+            Toast.makeText(this, "請輸入搜尋內容", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        textStatus.text = "搜尋定位中..."
+
+        Thread {
+            var lat: Double? = null
+            var lng: Double? = null
+            var resolvedName = inputText
+
+            val coords = inputText.split(Regex("[,\\s]+"))
+            if (coords.size == 2 && coords[0].toDoubleOrNull() != null && coords[1].toDoubleOrNull() != null) {
+                lat = coords[0].toDouble()
+                lng = coords[1].toDouble()
+            } else {
+                try {
+                    val geocoder = Geocoder(this@MainActivity, Locale.getDefault())
+                    val addresses = geocoder.getFromLocationName(inputText, 1)
+                    if (!addresses.isNullOrEmpty()) {
+                        val address = addresses[0]
+                        lat = address.latitude
+                        lng = address.longitude
+                        resolvedName = address.getAddressLine(0) ?: inputText
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            runOnUiThread {
+                if (lat != null && lng != null) {
+                    currentLat = lat
+                    currentLng = lng
+                    startMocking()
+
+                    btnSet.text = "停止模擬定位"
+                    updateStatusAndMap(resolvedName)
+                    Toast.makeText(this@MainActivity, "定位已更新！", Toast.LENGTH_SHORT).show()
+                } else {
+                    textStatus.text = "無法解析該地點，請重新檢查"
+                    Toast.makeText(this@MainActivity, "找不到地點，請確認輸入內容", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    // 設定「我的最愛」按鈕邏輯 (點擊：帶入+自動定位；長按：直接讀取剪貼簿覆蓋儲存)
     private fun setupFavorite(button: Button, slotKey: String, defaultValue: String) {
         val prefs = getSharedPreferences("MyFakeGPSFavs", Context.MODE_PRIVATE)
         var savedVal = prefs.getString(slotKey, defaultValue) ?: defaultValue
@@ -205,21 +213,24 @@ class MainActivity : AppCompatActivity() {
 
         updateButtonLabel()
 
+        // 點擊：帶入輸入框 + 自動執行定位
         button.setOnClickListener {
             editSearch.setText(savedVal)
             editSearch.selectAll()
-            Toast.makeText(this, "已帶入: $savedVal", Toast.LENGTH_SHORT).show()
+            performLocationSearch(savedVal)
         }
 
+        // 長按：直接讀取剪貼簿文字儲存至最愛
         button.setOnLongClickListener {
-            val currentText = editSearch.text.toString().trim()
-            if (currentText.isNotEmpty()) {
-                savedVal = currentText
+            val clipText = getClipboardText()
+            if (!clipText.isNullOrEmpty()) {
+                savedVal = clipText
                 prefs.edit().putString(slotKey, savedVal).apply()
                 updateButtonLabel()
-                Toast.makeText(this, "已長按儲存至最愛: $savedVal", Toast.LENGTH_SHORT).show()
+                editSearch.setText(savedVal)
+                Toast.makeText(this, "已將剪貼簿內容儲存至最愛: $savedVal", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "請先輸入地名再長按儲存", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "剪貼簿為空，無法儲存至最愛", Toast.LENGTH_SHORT).show()
             }
             true
         }
