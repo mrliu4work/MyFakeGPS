@@ -1,6 +1,7 @@
 package com.example.myfakegps
 
 import android.content.Context
+import android.location.Criteria
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
@@ -36,12 +37,26 @@ class MainActivity : AppCompatActivity() {
             val lng = lngStr.toDouble()
 
             try {
+                // 若先前已建立過 Test Provider，先清理避免重複註冊衝突
+                try {
+                    locationManager.removeTestProvider(providerName)
+                } catch (e: Exception) {
+                    // 忽略尚未註冊時引發的例外
+                }
+
+                // 1. 向系統註冊 Test Provider
+                // 倒數第二個參數 (powerRequirement) 改為 1 (Criteria.POWER_LOW)
+                // 最後一個參數 (accuracy) 改為 1 (Criteria.ACCURACY_FINE)
                 locationManager.addTestProvider(
-                    providerName, false, false, false, false,
-                    true, true, true, 0, 5
+                    providerName,
+                    false, false, false, false,
+                    true, true, true,
+                    Criteria.POWER_LOW,
+                    Criteria.ACCURACY_FINE
                 )
                 locationManager.setTestProviderEnabled(providerName, true)
 
+                // 2. 建立假座標物件
                 val mockLocation = Location(providerName).apply {
                     latitude = lat
                     longitude = lng
@@ -51,6 +66,7 @@ class MainActivity : AppCompatActivity() {
                     elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
                 }
 
+                // 3. 寫入假座標
                 locationManager.setTestProviderLocation(providerName, mockLocation)
 
                 Toast.makeText(this, "位置已成功修改為: $lat, $lng", Toast.LENGTH_SHORT).show()
@@ -59,7 +75,8 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "失敗！請先到開發人員選項設定「模擬位置應用程式」", Toast.LENGTH_LONG).show()
                 e.printStackTrace()
             } catch (e: Exception) {
-                Toast.makeText(this, "發生未知錯誤: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "發生錯誤: ${e.message}", Toast.LENGTH_LONG).show()
+                e.printStackTrace()
             }
         }
     }
