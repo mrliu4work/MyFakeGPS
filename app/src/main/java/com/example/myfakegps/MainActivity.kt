@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
@@ -37,12 +38,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var seekSpeed: SeekBar
     private lateinit var textStatus: TextView
     private lateinit var textMapSelected: TextView
+
+    private lateinit var btnToggleMock: Button
+    private lateinit var btnToggleWander: Button
     private lateinit var btnNavToMapTap: Button
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
     private var mapTappedLat: Double? = null
     private var mapTappedLng: Double? = null
+
+    private var isMockingOn = false
+    private var isWanderingOn = false
 
     private var currentMarker: Marker? = null
     private var targetMarker: Marker? = null
@@ -53,13 +60,18 @@ class MainActivity : AppCompatActivity() {
                 MockLocationService.ACTION_LOCATION_UPDATED -> {
                     val lat = intent.getDoubleExtra(MockLocationService.EXTRA_LAT, currentLat)
                     val lng = intent.getDoubleExtra(MockLocationService.EXTRA_LNG, currentLng)
-                    val mode = intent.getStringExtra(MockLocationService.EXTRA_MODE)
+                    val mode = intent.getStringExtra(MockLocationService.EXTRA_MODE) ?: MockLocationService.MODE_FIXED
                     currentLat = lat
                     currentLng = lng
-                    updateMapAndStatus("移動中 ($mode)")
+                    isMockingOn = true
+                    isWanderingOn = (mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV)
+                    updateUIState(mode)
+                    updateMapAndStatus("模擬中 ($mode)")
                 }
                 MockLocationService.ACTION_NAV_FINISHED -> {
                     Toast.makeText(this@MainActivity, "🏁 抵達目的地，導航結束！", Toast.LENGTH_LONG).show()
+                    isWanderingOn = false
+                    updateUIState(MockLocationService.MODE_FIXED)
                     if (targetMarker != null) {
                         mapView.overlays.remove(targetMarker)
                         targetMarker = null
@@ -82,13 +94,13 @@ class MainActivity : AppCompatActivity() {
         seekSpeed = findViewById(R.id.seekSpeed)
         textStatus = findViewById(R.id.textStatus)
         textMapSelected = findViewById(R.id.textMapSelected)
+
+        btnToggleMock = findViewById(R.id.btnToggleMock)
+        btnToggleWander = findViewById(R.id.btnToggleWander)
         btnNavToMapTap = findViewById(R.id.btnNavToMapTap)
-        mapView = findViewById(R.id.mapView)
 
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
-        val btnRandom = findViewById<Button>(R.id.btnRandomWander)
-        val btnStop = findViewById<Button>(R.id.btnStopAll)
         val btnPaste = findViewById<Button>(R.id.btnPaste)
 
         val btnOpenDev = findViewById<Button>(R.id.btnOpenDevSettings)
@@ -99,6 +111,7 @@ class MainActivity : AppCompatActivity() {
         val btnEast = findViewById<Button>(R.id.btnEast)
         val btnWest = findViewById<Button>(R.id.btnWest)
 
+        mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(17.0)
@@ -142,40 +155,92 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 開關 1：主模擬定位開關 (開/關)
+        btnToggleMock.setOnClickListener {
+            if (isMockingOn) {
+                // 關閉模擬定位 (同時關閉漫步與服務)
+                MockLocationService.stop(this)
+                isMockingOn = false
+                isWanderingOn = false
+                updateUIState(MockLocationService.MODE_FIXED)
+                textStatus.text = "狀態：已關閉模擬定位"
+                Toast.makeText(this, "已關閉模擬定位", Toast.LENGTH_SHORT).show()
+            } else {
+                // 開啟定點模擬定位
+                MockLocationService.startFixed(this, currentLat, currentLng, "自訂點")
+                isMockingOn = true
+                updateUIState(MockLocationService.MODE_FIXED)
+                Toast.makeText(this, "▶ 已開啟定點模擬定位", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 開關 2：隨機漫步開關 (開始/停止漫步)
+        btnToggleWander.setOnClickListener {
+            if (isWanderingOn) {
+                // 停止漫步：回到定點模擬 (保持模擬定位開啟，停在當前位置)
+                MockLocationService.startFixed(this, currentLat, currentLng, "漫步停止點")
+                isWanderingOn = false
+                updateUIState(MockLocationService.MODE_FIXED)
+                Toast.makeText(this, "已停止漫步，定點鎖定在當前位置", Toast.LENGTH_SHORT).show()
+            } else {
+                // 開始隨機漫步 (若模擬定位未開，自動開啟)
+                val speed = getSpeed()
+                MockLocationService.startRandom(this, currentLat, currentLng, speed)
+                isMockingOn = true
+                isWanderingOn = true
+                updateUIState(MockLocationService.MODE_RANDOM)
+                Toast.makeText(this, "🎲 已開始沿路隨機漫步！", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 定點傳送
         btnSet.setOnClickListener {
             val inputText = editSearch.text.toString().trim()
             performLocationSearch(inputText, isNav = false)
         }
 
+        // 導航至輸入點
         btnNavSearch.setOnClickListener {
             val inputText = editSearch.text.toString().trim()
             performLocationSearch(inputText, isNav = true)
         }
 
-        btnRandom.setOnClickListener {
-            val speed = getSpeed()
-            MockLocationService.startRandom(this, speed)
-            Toast.makeText(this, "🎲 沿路隨機漫步模式已啟動！", Toast.LENGTH_SHORT).show()
-        }
-
+        // 導航至地圖點
         btnNavToMapTap.setOnClickListener {
             if (mapTappedLat != null && mapTappedLng != null) {
                 val speed = getSpeed()
-                MockLocationService.startNav(this, mapTappedLat!!, mapTappedLng!!, speed, "地圖點標記")
+                MockLocationService.startNav(this, currentLat, currentLng, mapTappedLat!!, mapTappedLng!!, speed, "地圖點標記")
+                isMockingOn = true
+                isWanderingOn = true
+                updateUIState(MockLocationService.MODE_NAV)
                 Toast.makeText(this, "🚩 開始導航至地圖點！", Toast.LENGTH_SHORT).show()
             }
-        }
-
-        btnStop.setOnClickListener {
-            MockLocationService.stop(this)
-            textStatus.text = "已停止定位模擬"
-            Toast.makeText(this, "已停止背景服務", Toast.LENGTH_SHORT).show()
         }
 
         btnNorth.setOnClickListener { moveLocation(0.0, getDistanceStep()) }
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
+    }
+
+    private fun updateUIState(mode: String) {
+        if (!isMockingOn) {
+            btnToggleMock.text = "▶ 開啟模擬定位"
+            btnToggleMock.setBackgroundColor(Color.parseColor("#2E7D32")) // 綠色
+            btnToggleWander.text = "🎲 開始隨機漫步"
+            btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
+        } else {
+            btnToggleMock.text = "⏹ 關閉模擬定位"
+            btnToggleMock.setBackgroundColor(Color.parseColor("#D32F2F")) // 紅色
+
+            if (isWanderingOn || mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV) {
+                btnToggleWander.text = "⏸ 停止漫步/導航"
+                btnToggleWander.setBackgroundColor(Color.parseColor("#F57C00")) // 橘色
+            } else {
+                btnToggleWander.text = "🎲 開始隨機漫步"
+                btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
+            }
+        }
     }
 
     private fun setupMapEventsOverlay() {
@@ -278,14 +343,20 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (lat != null && lng != null) {
+                    val speed = getSpeed()
                     if (isNav) {
-                        val speed = getSpeed()
-                        MockLocationService.startNav(this, lat!!, lng!!, speed, resolvedName)
+                        MockLocationService.startNav(this, currentLat, currentLng, lat!!, lng!!, speed, resolvedName)
+                        isMockingOn = true
+                        isWanderingOn = true
+                        updateUIState(MockLocationService.MODE_NAV)
                         Toast.makeText(this@MainActivity, "🧭 開始導航至: $resolvedName", Toast.LENGTH_SHORT).show()
                     } else {
                         currentLat = lat!!
                         currentLng = lng!!
                         MockLocationService.startFixed(this, currentLat, currentLng, resolvedName)
+                        isMockingOn = true
+                        isWanderingOn = false
+                        updateUIState(MockLocationService.MODE_FIXED)
                         updateMapAndStatus(resolvedName)
                         Toast.makeText(this@MainActivity, "📍 已定點傳送！", Toast.LENGTH_SHORT).show()
                     }
@@ -342,11 +413,19 @@ class MainActivity : AppCompatActivity() {
         currentLng += deltaLng
 
         MockLocationService.startFixed(this, currentLat, currentLng, "微調移動")
+        isMockingOn = true
+        isWanderingOn = false
+        updateUIState(MockLocationService.MODE_FIXED)
         updateMapAndStatus("微調移動")
     }
 
     private fun updateMapAndStatus(statusText: String) {
-        textStatus.text = "模擬中 [$statusText]\n座標: %.5f, %.5f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
+        val stateLabel = when {
+            !isMockingOn -> "已關閉模擬"
+            isWanderingOn -> "漫步/導航中"
+            else -> "定點模擬中"
+        }
+        textStatus.text = "狀態：[$stateLabel] $statusText\n座標: %.5f, %.5f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
 
         val geoPoint = GeoPoint(currentLat, currentLng)
         mapView.controller.setCenter(geoPoint)
