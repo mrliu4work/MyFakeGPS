@@ -119,8 +119,9 @@ class MockLocationService : Service() {
         }
     }
 
+    // 重構修正後的沿著 Polyline 推進演算法 (以當前實時座標為基準)
     private fun stepAlongPolyline() {
-        if (polyline.isEmpty() || routeIndex >= polyline.size - 1) {
+        if (polyline.isEmpty() || routeIndex >= polyline.size) {
             if (mode == MODE_RANDOM) {
                 fetchNextRandomRouteAndStart()
             } else if (mode == MODE_NAV) {
@@ -130,23 +131,23 @@ class MockLocationService : Service() {
             return
         }
 
-        var stepMeters = (speedKmH * 1000.0) / 3600.0
+        var stepMeters = (speedKmH * 1000.0) / 3600.0 // 當前秒數應移動的距離 (公尺)
 
-        while (stepMeters > 0 && routeIndex < polyline.size - 1) {
-            val p1 = polyline[routeIndex]
-            val p2 = polyline[routeIndex + 1]
+        while (stepMeters > 0 && routeIndex < polyline.size) {
+            val targetPoint = polyline[routeIndex]
+            val distToTarget = distanceBetween(currentLat, currentLng, targetPoint.latitude, targetPoint.longitude)
 
-            val dist = distanceBetween(p1.latitude, p1.longitude, p2.latitude, p2.longitude)
-
-            if (stepMeters >= dist) {
-                stepMeters -= dist
-                currentLat = p2.latitude
-                currentLng = p2.longitude
+            if (distToTarget <= stepMeters) {
+                // 當前距離小於當秒步長：直接踏上目標點，並扣除已走距離，前進至下一個節點
+                stepMeters -= distToTarget
+                currentLat = targetPoint.latitude
+                currentLng = targetPoint.longitude
                 routeIndex++
             } else {
-                val ratio = stepMeters / dist
-                currentLat = p1.latitude + ratio * (p2.latitude - p1.latitude)
-                currentLng = p1.longitude + ratio * (p2.longitude - p1.longitude)
+                // 朝目標點推進相對比例
+                val ratio = stepMeters / distToTarget
+                currentLat += ratio * (targetPoint.latitude - currentLat)
+                currentLng += ratio * (targetPoint.longitude - currentLng)
                 stepMeters = 0.0
             }
         }
@@ -392,6 +393,13 @@ class MockLocationService : Service() {
                 putExtra(EXTRA_MODE, MODE_RANDOM)
                 putExtra(EXTRA_LAT, currentLat)
                 putExtra(EXTRA_LNG, currentLng)
+                putExtra(EXTRA_SPEED, speed)
+            }
+            startServiceIntent(context, intent)
+        }
+
+        fun updateSpeed(context: Context, speed: Double) {
+            val intent = Intent(context, MockLocationService::class.java).apply {
                 putExtra(EXTRA_SPEED, speed)
             }
             startServiceIntent(context, intent)
