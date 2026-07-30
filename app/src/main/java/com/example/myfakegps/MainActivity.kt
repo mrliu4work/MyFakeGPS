@@ -180,7 +180,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupMapEventsOverlay() {
         val receiver = object : MapEventsReceiver {
-            override fun singleTapConfirmedByStatic(p: GeoPoint?): Boolean {
+            override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                 p?.let {
                     mapTappedLat = it.latitude
                     mapTappedLng = it.longitude
