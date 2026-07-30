@@ -253,9 +253,32 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "已停止背景模擬服務", Toast.LENGTH_SHORT).show()
     }
 
+    // 自動回復背景服務傳回的最新座標與狀態
+    private fun restoreServiceState() {
+        val prefs = getSharedPreferences("ServiceState", Context.MODE_PRIVATE)
+        val mocking = prefs.getBoolean("is_mocking", false)
+        if (mocking) {
+            val latStr = prefs.getString("active_lat", null)
+            val lngStr = prefs.getString("active_lng", null)
+            val name = prefs.getString("active_name", "自訂位置") ?: "自訂位置"
+
+            val lat = latStr?.toDoubleOrNull()
+            val lng = lngStr?.toDoubleOrNull()
+
+            if (lat != null && lng != null) {
+                currentLat = lat
+                currentLng = lng
+                isMocking = true
+                btnSet.text = "停止模擬定位"
+                updateStatusAndMap(name)
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+        restoreServiceState()
     }
 
     override fun onPause() {

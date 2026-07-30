@@ -58,7 +58,9 @@ class MockLocationService : Service() {
         currentLng = lng
         locationName = name
 
-        // 啟動 Foreground Service 常駐通知
+        // 儲存目前最新狀態至本地，供 UI 回復使用
+        saveState(this, true, currentLat, currentLng, locationName)
+
         startForeground(NOTIFICATION_ID, buildNotification(locationName, currentLat, currentLng))
 
         if (!isMocking) {
@@ -120,6 +122,7 @@ class MockLocationService : Service() {
                 // 忽略
             }
         }
+        saveState(this, false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -170,6 +173,17 @@ class MockLocationService : Service() {
         const val EXTRA_LNG = "extra_lng"
         const val EXTRA_NAME = "extra_name"
         const val ACTION_STOP = "action_stop"
+
+        private fun saveState(context: Context, isMocking: Boolean, lat: Double = 0.0, lng: Double = 0.0, name: String = "") {
+            val prefs = context.getSharedPreferences("ServiceState", Context.MODE_PRIVATE)
+            val editor = prefs.edit().putBoolean("is_mocking", isMocking)
+            if (isMocking) {
+                editor.putString("active_lat", lat.toString())
+                    .putString("active_lng", lng.toString())
+                    .putString("active_name", name)
+            }
+            editor.apply()
+        }
 
         fun start(context: Context, lat: Double, lng: Double, name: String) {
             val intent = Intent(context, MockLocationService::class.java).apply {
