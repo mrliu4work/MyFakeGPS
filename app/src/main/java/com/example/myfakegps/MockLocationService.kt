@@ -361,4 +361,34 @@ class MockLocationService : Service() {
             val intent = Intent(context, MockLocationService::class.java).apply {
                 putExtra(EXTRA_MODE, MODE_NAV)
                 putExtra(EXTRA_DEST_LAT, destLat)
-                putExtra(EXTRA_DEST_LNG,
+                putExtra(EXTRA_DEST_LNG, destLng)
+                putExtra(EXTRA_SPEED, speed)
+                putExtra(EXTRA_NAME, name)
+            }
+            startServiceIntent(context, intent)
+        }
+
+        fun startRandom(context: Context, speed: Double) {
+            val intent = Intent(context, MockLocationService::class.java).apply {
+                putExtra(EXTRA_MODE, MODE_RANDOM)
+                putExtra(EXTRA_SPEED, speed)
+            }
+            startServiceIntent(context, intent)
+        }
+
+        fun stop(context: Context) {
+            val intent = Intent(context, MockLocationService::class.java).apply {
+                action = ACTION_STOP
+            }
+            context.startService(intent)
+        }
+
+        private fun startServiceIntent(context: Context, intent: Intent) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
+}
