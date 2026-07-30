@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
                     isMockingOn = true
                     isWanderingOn = (mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV)
                     updateUIState(mode)
-                    updateMapAndStatus("模擬中 ($mode)")
+                    updateMapAndStatus("移動中 ($mode)")
                 }
                 MockLocationService.ACTION_NAV_FINISHED -> {
                     Toast.makeText(this@MainActivity, "🏁 抵達目的地，導航結束！", Toast.LENGTH_LONG).show()
@@ -155,10 +155,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 開關 1：主模擬定位開關 (開/關)
         btnToggleMock.setOnClickListener {
             if (isMockingOn) {
-                // 關閉模擬定位 (同時關閉漫步與服務)
                 MockLocationService.stop(this)
                 isMockingOn = false
                 isWanderingOn = false
@@ -166,7 +164,6 @@ class MainActivity : AppCompatActivity() {
                 textStatus.text = "狀態：已關閉模擬定位"
                 Toast.makeText(this, "已關閉模擬定位", Toast.LENGTH_SHORT).show()
             } else {
-                // 開啟定點模擬定位
                 MockLocationService.startFixed(this, currentLat, currentLng, "自訂點")
                 isMockingOn = true
                 updateUIState(MockLocationService.MODE_FIXED)
@@ -174,16 +171,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 開關 2：隨機漫步開關 (開始/停止漫步)
         btnToggleWander.setOnClickListener {
             if (isWanderingOn) {
-                // 停止漫步：回到定點模擬 (保持模擬定位開啟，停在當前位置)
                 MockLocationService.startFixed(this, currentLat, currentLng, "漫步停止點")
                 isWanderingOn = false
                 updateUIState(MockLocationService.MODE_FIXED)
                 Toast.makeText(this, "已停止漫步，定點鎖定在當前位置", Toast.LENGTH_SHORT).show()
             } else {
-                // 開始隨機漫步 (若模擬定位未開，自動開啟)
                 val speed = getSpeed()
                 MockLocationService.startRandom(this, currentLat, currentLng, speed)
                 isMockingOn = true
@@ -193,19 +187,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 定點傳送
         btnSet.setOnClickListener {
             val inputText = editSearch.text.toString().trim()
             performLocationSearch(inputText, isNav = false)
         }
 
-        // 導航至輸入點
         btnNavSearch.setOnClickListener {
             val inputText = editSearch.text.toString().trim()
             performLocationSearch(inputText, isNav = true)
         }
 
-        // 導航至地圖點
         btnNavToMapTap.setOnClickListener {
             if (mapTappedLat != null && mapTappedLng != null) {
                 val speed = getSpeed()
@@ -226,16 +217,16 @@ class MainActivity : AppCompatActivity() {
     private fun updateUIState(mode: String) {
         if (!isMockingOn) {
             btnToggleMock.text = "▶ 開啟模擬定位"
-            btnToggleMock.setBackgroundColor(Color.parseColor("#2E7D32")) // 綠色
+            btnToggleMock.setBackgroundColor(Color.parseColor("#2E7D32"))
             btnToggleWander.text = "🎲 開始隨機漫步"
             btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
         } else {
             btnToggleMock.text = "⏹ 關閉模擬定位"
-            btnToggleMock.setBackgroundColor(Color.parseColor("#D32F2F")) // 紅色
+            btnToggleMock.setBackgroundColor(Color.parseColor("#D32F2F"))
 
             if (isWanderingOn || mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV) {
                 btnToggleWander.text = "⏸ 停止漫步/導航"
-                btnToggleWander.setBackgroundColor(Color.parseColor("#F57C00")) // 橘色
+                btnToggleWander.setBackgroundColor(Color.parseColor("#F57C00"))
             } else {
                 btnToggleWander.text = "🎲 開始隨機漫步"
                 btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
@@ -278,6 +269,9 @@ class MainActivity : AppCompatActivity() {
                 if (fromUser) {
                     val spd = if (progress < 1) 1 else progress
                     editSpeed.setText(spd.toString())
+                    if (isMockingOn) {
+                        MockLocationService.updateSpeed(this@MainActivity, spd.toDouble())
+                    }
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -291,6 +285,9 @@ class MainActivity : AppCompatActivity() {
                 val spd = s.toString().toIntOrNull() ?: 5
                 if (seekSpeed.progress != spd) {
                     seekSpeed.progress = spd.coerceIn(1, 50)
+                }
+                if (isMockingOn) {
+                    MockLocationService.updateSpeed(this@MainActivity, spd.toDouble())
                 }
             }
         })
