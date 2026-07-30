@@ -3,15 +3,9 @@ package com.example.myfakegps
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.location.Criteria
 import android.location.Geocoder
-import android.location.Location
-import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
@@ -28,38 +22,22 @@ import kotlin.math.cos
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var locationManager: LocationManager
     private lateinit var mapView: MapView
     private lateinit var editSearch: EditText
     private lateinit var editDistance: EditText
     private lateinit var textStatus: TextView
     private lateinit var btnSet: Button
 
-    private val handler = Handler(Looper.getMainLooper())
     private var isMocking = false
     private var currentLat: Double? = null
     private var currentLng: Double? = null
     private var marker: Marker? = null
 
-    private val providers = arrayOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-
-    private val updateRunnable = object : Runnable {
-        override fun run() {
-            if (isMocking && currentLat != null && currentLng != null) {
-                pushLocationToAllProviders(currentLat!!, currentLng!!)
-                handler.postDelayed(this, 1000)
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 設定修復 OpenStreetMap 403 存取封鎖的 User-Agent 標頭
         Configuration.getInstance().userAgentValue = "MyFakeGPSApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
-
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         editSearch = findViewById(R.id.editSearch)
         editDistance = findViewById(R.id.editDistance)
@@ -76,15 +54,12 @@ class MainActivity : AppCompatActivity() {
         val btnEast = findViewById<Button>(R.id.btnEast)
         val btnWest = findViewById<Button>(R.id.btnWest)
 
-        // 初始化地圖
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(17.0)
 
-        // 輸入框點擊自動全選
         editSearch.setOnClickListener { editSearch.selectAll() }
 
-        // 一鍵貼上按鈕：貼上並直接解析搜尋更新座標
         btnPaste.setOnClickListener {
             val text = getClipboardText()
             if (!text.isNullOrEmpty()) {
@@ -96,13 +71,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 設定 4 組我的最愛按鈕 (點擊帶入並自動搜尋定位，長按直接從剪貼簿讀取覆蓋儲存)
         setupFavorite(findViewById(R.id.btnFav1), "fav_1", "CCM9+QMH Santorini")
         setupFavorite(findViewById(R.id.btnFav2), "fav_2", "台北 101")
         setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔")
         setupFavorite(findViewById(R.id.btnFav4), "fav_4", "埃菲爾鐵塔")
 
-        // 捷徑 1：開啟開發者選項
         btnOpenDev.setOnClickListener {
             try {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
@@ -111,7 +84,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 捷徑 2：開啟應用程式資訊 (設定電池用量)
         btnOpenAppInfo.setOnClickListener {
             try {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -122,20 +94,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 搜尋與定位按鈕 (若正在模擬中點擊則停止)
         btnSet.setOnClickListener {
             if (isMocking) {
                 stopMocking()
-                btnSet.text = "搜尋並修改定位"
-                textStatus.text = "已停止模擬位置"
-                Toast.makeText(this, "已停止模擬定位", Toast.LENGTH_SHORT).show()
             } else {
                 val inputText = editSearch.text.toString().trim()
                 performLocationSearch(inputText)
             }
         }
 
-        // 十字按鈕微調移動
         btnNorth.setOnClickListener { moveLocation(0.0, getDistanceStep()) }
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
@@ -151,7 +118,6 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    // 執行地點搜尋、解析與座標更新寫入
     private fun performLocationSearch(inputText: String) {
         if (inputText.isEmpty()) {
             Toast.makeText(this, "請輸入搜尋內容", Toast.LENGTH_SHORT).show()
@@ -188,11 +154,9 @@ class MainActivity : AppCompatActivity() {
                 if (lat != null && lng != null) {
                     currentLat = lat
                     currentLng = lng
-                    startMocking()
-
-                    btnSet.text = "停止模擬定位"
+                    startMocking(resolvedName)
                     updateStatusAndMap(resolvedName)
-                    Toast.makeText(this@MainActivity, "定位已更新！", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "前景服務已啟動，定位已常駐！", Toast.LENGTH_SHORT).show()
                 } else {
                     textStatus.text = "無法解析該地點，請重新檢查"
                     Toast.makeText(this@MainActivity, "找不到地點，請確認輸入內容", Toast.LENGTH_LONG).show()
@@ -201,7 +165,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // 設定「我的最愛」按鈕邏輯 (點擊：帶入+自動定位；長按：直接讀取剪貼簿覆蓋儲存)
     private fun setupFavorite(button: Button, slotKey: String, defaultValue: String) {
         val prefs = getSharedPreferences("MyFakeGPSFavs", Context.MODE_PRIVATE)
         var savedVal = prefs.getString(slotKey, defaultValue) ?: defaultValue
@@ -213,14 +176,12 @@ class MainActivity : AppCompatActivity() {
 
         updateButtonLabel()
 
-        // 點擊：帶入輸入框 + 自動執行定位
         button.setOnClickListener {
             editSearch.setText(savedVal)
             editSearch.selectAll()
             performLocationSearch(savedVal)
         }
 
-        // 長按：直接讀取剪貼簿文字儲存至最愛
         button.setOnLongClickListener {
             val clipText = getClipboardText()
             if (!clipText.isNullOrEmpty()) {
@@ -252,7 +213,7 @@ class MainActivity : AppCompatActivity() {
         currentLng = lng + deltaLng
 
         if (isMocking) {
-            pushLocationToAllProviders(currentLat!!, currentLng!!)
+            MockLocationService.start(this, currentLat!!, currentLng!!, "微調移動後")
         }
         updateStatusAndMap("微調移動後的位置")
     }
@@ -261,7 +222,7 @@ class MainActivity : AppCompatActivity() {
         val lat = currentLat ?: return
         val lng = currentLng ?: return
 
-        textStatus.text = "模擬中...\n位置: $locationName\n緯度: %.6f, 經度: %.6f".format(lat, lng)
+        textStatus.text = "前景常駐模擬中...\n位置: $locationName\n緯度: %.6f, 經度: %.6f".format(lat, lng)
 
         val geoPoint = GeoPoint(lat, lng)
         mapView.controller.setCenter(geoPoint)
@@ -276,67 +237,20 @@ class MainActivity : AppCompatActivity() {
         mapView.invalidate()
     }
 
-    private fun startMocking() {
-        stopMocking()
-        setupTestProviders()
+    private fun startMocking(locationName: String) {
+        val lat = currentLat ?: return
+        val lng = currentLng ?: return
         isMocking = true
-        handler.post(updateRunnable)
+        btnSet.text = "停止模擬定位"
+        MockLocationService.start(this, lat, lng, locationName)
     }
 
     private fun stopMocking() {
         isMocking = false
-        handler.removeCallbacks(updateRunnable)
-        removeTestProviders()
-    }
-
-    private fun setupTestProviders() {
-        for (provider in providers) {
-            try {
-                locationManager.removeTestProvider(provider)
-            } catch (e: Exception) {
-                // 忽略
-            }
-            try {
-                locationManager.addTestProvider(
-                    provider,
-                    false, false, false, false,
-                    true, true, true,
-                    Criteria.POWER_LOW,
-                    Criteria.ACCURACY_FINE
-                )
-                locationManager.setTestProviderEnabled(provider, true)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    private fun removeTestProviders() {
-        for (provider in providers) {
-            try {
-                locationManager.removeTestProvider(provider)
-            } catch (e: Exception) {
-                // 忽略
-            }
-        }
-    }
-
-    private fun pushLocationToAllProviders(lat: Double, lng: Double) {
-        for (provider in providers) {
-            try {
-                val mockLocation = Location(provider).apply {
-                    latitude = lat
-                    longitude = lng
-                    altitude = 0.0
-                    time = System.currentTimeMillis()
-                    accuracy = 5f
-                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-                }
-                locationManager.setTestProviderLocation(provider, mockLocation)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        btnSet.text = "搜尋並修改定位"
+        textStatus.text = "已停止模擬位置"
+        MockLocationService.stop(this)
+        Toast.makeText(this, "已停止背景模擬服務", Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {
@@ -347,10 +261,5 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         mapView.onPause()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopMocking()
     }
 }
