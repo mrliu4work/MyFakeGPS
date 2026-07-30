@@ -19,6 +19,7 @@ import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import kotlin.math.cos
 
 class MockLocationService : Service() {
@@ -26,11 +27,11 @@ class MockLocationService : Service() {
     private lateinit var locationManager: LocationManager
     private val handler = Handler(Looper.getMainLooper())
 
-    private var currentLat: Double = 0.0
-    private var currentLng: Double = 0.0
+    private var currentLat: Double = 25.0339
+    private var currentLng: Double = 121.5640
     private var speedKmH: Double = 5.0
     private var mode: String = MODE_FIXED
-    private var locationName: String = ""
+    private var locationName: String = "預設位置"
     private var isMocking = false
 
     private val polyline = mutableListOf<GeoPoint>()
@@ -48,9 +49,9 @@ class MockLocationService : Service() {
                     MODE_NAV, MODE_RANDOM -> {
                         stepAlongPolyline()
                         pushLocationToAllProviders(currentLat, currentLng)
-                        broadcastLocationUpdate()
                     }
                 }
+                broadcastLocationUpdate()
                 handler.postDelayed(this, 1000)
             }
         }
@@ -69,29 +70,42 @@ class MockLocationService : Service() {
             return START_NOT_STICKY
         }
 
-        mode = intent?.getStringExtra(EXTRA_MODE) ?: MODE_FIXED
-        speedKmH = intent?.getDoubleExtra(EXTRA_SPEED, 5.0) ?: 5.0
-        val name = intent?.getStringExtra(EXTRA_NAME) ?: "自訂位置"
+        val newMode = intent?.getStringExtra(EXTRA_MODE) ?: mode
+        speedKmH = intent?.getDoubleExtra(EXTRA_SPEED, speedKmH) ?: speedKmH
+        val name = intent?.getStringExtra(EXTRA_NAME) ?: locationName
 
         val lat = intent?.getDoubleExtra(EXTRA_LAT, 0.0) ?: 0.0
         val lng = intent?.getDoubleExtra(EXTRA_LNG, 0.0) ?: 0.0
 
-        if (mode == MODE_FIXED) {
+        if (lat != 0.0 && lng != 0.0) {
             currentLat = lat
             currentLng = lng
-            locationName = name
-            startForeground(NOTIFICATION_ID, buildNotification("定點傳送: $locationName", currentLat, currentLng))
-            startMockingLoop()
-        } else if (mode == MODE_NAV) {
+        }
+
+        mode = newMode
+        locationName = name
+
+        val notificationTitle = when (mode) {
+            MODE_FIXED -> "定點模擬: $locationName"
+            MODE_NAV -> "導航前往: $locationName"
+            MODE_RANDOM -> "沿路隨機漫步中"
+            else -> "定位模擬中"
+        }
+
+        startForeground(NOTIFICATION_ID, buildNotification(notificationTitle, currentLat, currentLng))
+
+        if (mode == MODE_NAV) {
             val destLat = intent?.getDoubleExtra(EXTRA_DEST_LAT, 0.0) ?: 0.0
             val destLng = intent?.getDoubleExtra(EXTRA_DEST_LNG, 0.0) ?: 0.0
-            locationName = name
-            startForeground(NOTIFICATION_ID, buildNotification("導航前往: $locationName", currentLat, currentLng))
-            fetchRouteAndStart(destLat, destLng)
+            if (destLat != 0.0 && destLng != 0.0) {
+                fetchRouteAndStart(destLat, destLng)
+            }
         } else if (mode == MODE_RANDOM) {
-            locationName = "沿路隨機漫步中"
-            startForeground(NOTIFICATION_ID, buildNotification(locationName, currentLat, currentLng))
             fetchNextRandomRouteAndStart()
+        } else if (mode == MODE_FIXED) {
+            polyline.clear()
+            routeIndex = 0
+            startMockingLoop()
         }
 
         return START_STICKY
@@ -142,18 +156,15 @@ class MockLocationService : Service() {
         Thread {
             val points = fetchOsrmRoute(currentLat, currentLng, destLat, destLng)
             handler.post {
+                polyline.clear()
                 if (!points.isNullOrEmpty()) {
-                    polyline.clear()
                     polyline.addAll(points)
-                    routeIndex = 0
-                    startMockingLoop()
                 } else {
-                    polyline.clear()
                     polyline.add(GeoPoint(currentLat, currentLng))
                     polyline.add(GeoPoint(destLat, destLng))
-                    routeIndex = 0
-                    startMockingLoop()
                 }
+                routeIndex = 0
+                startMockingLoop()
             }
         }.start()
     }
@@ -174,7 +185,11 @@ class MockLocationService : Service() {
 
     private fun fetchOsrmRoute(startLat: Double, startLng: Double, endLat: Double, endLng: Double): List<GeoPoint>? {
         return try {
-            val urlStr = "https://router.project-osrm.org/route/v1/foot/$startLng,$startLat;$endLng,$endLat?overview=full&geometries=geojson"
+            val urlStr = String.format(
+                Locale.US,
+                "https://router.project-osrm.org/route/v1/foot/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson",
+                startLng, startLat, endLng, endLat
+            )
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -279,6 +294,7 @@ class MockLocationService : Service() {
             putExtra(EXTRA_LAT, currentLat)
             putExtra(EXTRA_LNG, currentLng)
             putExtra(EXTRA_MODE, mode)
+            putExtra(EXTRA_IS_MOCKING, isMocking)
         }
         sendBroadcast(intent)
     }
@@ -338,6 +354,7 @@ class MockLocationService : Service() {
         const val EXTRA_SPEED = "extra_speed"
         const val EXTRA_MODE = "extra_mode"
         const val EXTRA_NAME = "extra_name"
+        const val EXTRA_IS_MOCKING = "extra_is_mocking"
 
         const val MODE_FIXED = "mode_fixed"
         const val MODE_NAV = "mode_nav"
@@ -357,9 +374,11 @@ class MockLocationService : Service() {
             startServiceIntent(context, intent)
         }
 
-        fun startNav(context: Context, destLat: Double, destLng: Double, speed: Double, name: String) {
+        fun startNav(context: Context, currentLat: Double, currentLng: Double, destLat: Double, destLng: Double, speed: Double, name: String) {
             val intent = Intent(context, MockLocationService::class.java).apply {
                 putExtra(EXTRA_MODE, MODE_NAV)
+                putExtra(EXTRA_LAT, currentLat)
+                putExtra(EXTRA_LNG, currentLng)
                 putExtra(EXTRA_DEST_LAT, destLat)
                 putExtra(EXTRA_DEST_LNG, destLng)
                 putExtra(EXTRA_SPEED, speed)
@@ -368,9 +387,11 @@ class MockLocationService : Service() {
             startServiceIntent(context, intent)
         }
 
-        fun startRandom(context: Context, speed: Double) {
+        fun startRandom(context: Context, currentLat: Double, currentLng: Double, speed: Double) {
             val intent = Intent(context, MockLocationService::class.java).apply {
                 putExtra(EXTRA_MODE, MODE_RANDOM)
+                putExtra(EXTRA_LAT, currentLat)
+                putExtra(EXTRA_LNG, currentLng)
                 putExtra(EXTRA_SPEED, speed)
             }
             startServiceIntent(context, intent)
