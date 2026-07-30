@@ -1,21 +1,29 @@
 package com.example.myfakegps
 
+import android.content.BroadcastReceiver
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.location.Geocoder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.Button
 import android.widget.EditText
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import java.util.Locale
 import kotlin.math.cos
@@ -25,13 +33,42 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mapView: MapView
     private lateinit var editSearch: EditText
     private lateinit var editDistance: EditText
+    private lateinit var editSpeed: EditText
+    private lateinit var seekSpeed: SeekBar
     private lateinit var textStatus: TextView
-    private lateinit var btnSet: Button
+    private lateinit var textMapSelected: TextView
+    private lateinit var btnNavToMapTap: Button
 
-    private var isMocking = false
-    private var currentLat: Double? = null
-    private var currentLng: Double? = null
-    private var marker: Marker? = null
+    private var currentLat: Double = 25.0339
+    private var currentLng: Double = 121.5640
+    private var mapTappedLat: Double? = null
+    private var mapTappedLng: Double? = null
+
+    private var currentMarker: Marker? = null
+    private var targetMarker: Marker? = null
+
+    private val locationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                MockLocationService.ACTION_LOCATION_UPDATED -> {
+                    val lat = intent.getDoubleExtra(MockLocationService.EXTRA_LAT, currentLat)
+                    val lng = intent.getDoubleExtra(MockLocationService.EXTRA_LNG, currentLng)
+                    val mode = intent.getStringExtra(MockLocationService.EXTRA_MODE)
+                    currentLat = lat
+                    currentLng = lng
+                    updateMapAndStatus("移動中 ($mode)")
+                }
+                MockLocationService.ACTION_NAV_FINISHED -> {
+                    Toast.makeText(this@MainActivity, "🏁 抵達目的地，導航結束！", Toast.LENGTH_LONG).show()
+                    if (targetMarker != null) {
+                        mapView.overlays.remove(targetMarker)
+                        targetMarker = null
+                        mapView.invalidate()
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,11 +78,19 @@ class MainActivity : AppCompatActivity() {
 
         editSearch = findViewById(R.id.editSearch)
         editDistance = findViewById(R.id.editDistance)
+        editSpeed = findViewById(R.id.editSpeed)
+        seekSpeed = findViewById(R.id.seekSpeed)
         textStatus = findViewById(R.id.textStatus)
+        textMapSelected = findViewById(R.id.textMapSelected)
+        btnNavToMapTap = findViewById(R.id.btnNavToMapTap)
         mapView = findViewById(R.id.mapView)
 
-        btnSet = findViewById(R.id.btnSetLocation)
+        val btnSet = findViewById<Button>(R.id.btnSetLocation)
+        val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
+        val btnRandom = findViewById<Button>(R.id.btnRandomWander)
+        val btnStop = findViewById<Button>(R.id.btnStopAll)
         val btnPaste = findViewById<Button>(R.id.btnPaste)
+
         val btnOpenDev = findViewById<Button>(R.id.btnOpenDevSettings)
         val btnOpenAppInfo = findViewById<Button>(R.id.btnOpenAppInfo)
 
@@ -58,6 +103,9 @@ class MainActivity : AppCompatActivity() {
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(17.0)
 
+        setupMapEventsOverlay()
+        setupSpeedControls()
+
         editSearch.setOnClickListener { editSearch.selectAll() }
 
         btnPaste.setOnClickListener {
@@ -65,9 +113,9 @@ class MainActivity : AppCompatActivity() {
             if (!text.isNullOrEmpty()) {
                 editSearch.setText(text)
                 editSearch.selectAll()
-                performLocationSearch(text)
+                performLocationSearch(text, isNav = false)
             } else {
-                Toast.makeText(this, "剪貼簿為空或無文字內容", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "剪貼簿為空", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -95,18 +143,96 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSet.setOnClickListener {
-            if (isMocking) {
-                stopMocking()
-            } else {
-                val inputText = editSearch.text.toString().trim()
-                performLocationSearch(inputText)
+            val inputText = editSearch.text.toString().trim()
+            performLocationSearch(inputText, isNav = false)
+        }
+
+        btnNavSearch.setOnClickListener {
+            val inputText = editSearch.text.toString().trim()
+            performLocationSearch(inputText, isNav = true)
+        }
+
+        btnRandom.setOnClickListener {
+            val speed = getSpeed()
+            MockLocationService.startRandom(this, speed)
+            Toast.makeText(this, "🎲 沿路隨機漫步模式已啟動！", Toast.LENGTH_SHORT).show()
+        }
+
+        btnNavToMapTap.setOnClickListener {
+            if (mapTappedLat != null && mapTappedLng != null) {
+                val speed = getSpeed()
+                MockLocationService.startNav(this, mapTappedLat!!, mapTappedLng!!, speed, "地圖點標記")
+                Toast.makeText(this, "🚩 開始導航至地圖點！", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        btnStop.setOnClickListener {
+            MockLocationService.stop(this)
+            textStatus.text = "已停止定位模擬"
+            Toast.makeText(this, "已停止背景服務", Toast.LENGTH_SHORT).show()
         }
 
         btnNorth.setOnClickListener { moveLocation(0.0, getDistanceStep()) }
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
+    }
+
+    private fun setupMapEventsOverlay() {
+        val receiver = object : MapEventsReceiver {
+            override fun singleTapConfirmedByStatic(p: GeoPoint?): Boolean {
+                p?.let {
+                    mapTappedLat = it.latitude
+                    mapTappedLng = it.longitude
+
+                    textMapSelected.text = "已選點: %.5f, %.5f".format(it.latitude, it.longitude)
+                    btnNavToMapTap.isEnabled = true
+
+                    if (targetMarker == null) {
+                        targetMarker = Marker(mapView)
+                        targetMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        mapView.overlays.add(targetMarker)
+                    }
+                    targetMarker?.position = it
+                    targetMarker?.title = "目標導航點"
+                    mapView.invalidate()
+                }
+                return true
+            }
+
+            override fun longPressHelper(p: GeoPoint?): Boolean = false
+        }
+
+        val overlay = MapEventsOverlay(receiver)
+        mapView.overlays.add(0, overlay)
+    }
+
+    private fun setupSpeedControls() {
+        seekSpeed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val spd = if (progress < 1) 1 else progress
+                    editSpeed.setText(spd.toString())
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        editSpeed.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val spd = s.toString().toIntOrNull() ?: 5
+                if (seekSpeed.progress != spd) {
+                    seekSpeed.progress = spd.coerceIn(1, 50)
+                }
+            }
+        })
+    }
+
+    private fun getSpeed(): Double {
+        return editSpeed.text.toString().toDoubleOrNull() ?: 5.0
     }
 
     private fun getClipboardText(): String? {
@@ -118,7 +244,7 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    private fun performLocationSearch(inputText: String) {
+    private fun performLocationSearch(inputText: String, isNav: Boolean) {
         if (inputText.isEmpty()) {
             Toast.makeText(this, "請輸入搜尋內容", Toast.LENGTH_SHORT).show()
             return
@@ -152,13 +278,19 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (lat != null && lng != null) {
-                    currentLat = lat
-                    currentLng = lng
-                    startMocking(resolvedName)
-                    updateStatusAndMap(resolvedName)
-                    Toast.makeText(this@MainActivity, "前景服務已啟動，定位已常駐！", Toast.LENGTH_SHORT).show()
+                    if (isNav) {
+                        val speed = getSpeed()
+                        MockLocationService.startNav(this, lat!!, lng!!, speed, resolvedName)
+                        Toast.makeText(this@MainActivity, "🧭 開始導航至: $resolvedName", Toast.LENGTH_SHORT).show()
+                    } else {
+                        currentLat = lat!!
+                        currentLng = lng!!
+                        MockLocationService.startFixed(this, currentLat, currentLng, resolvedName)
+                        updateMapAndStatus(resolvedName)
+                        Toast.makeText(this@MainActivity, "📍 已定點傳送！", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
-                    textStatus.text = "無法解析該地點，請重新檢查"
+                    textStatus.text = "無法解析該地點"
                     Toast.makeText(this@MainActivity, "找不到地點，請確認輸入內容", Toast.LENGTH_LONG).show()
                 }
             }
@@ -179,7 +311,7 @@ class MainActivity : AppCompatActivity() {
         button.setOnClickListener {
             editSearch.setText(savedVal)
             editSearch.selectAll()
-            performLocationSearch(savedVal)
+            performLocationSearch(savedVal, isNav = false)
         }
 
         button.setOnLongClickListener {
@@ -202,87 +334,54 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun moveLocation(deltaXMeters: Double, deltaYMeters: Double) {
-        val lat = currentLat ?: return
-        val lng = currentLng ?: return
-
         val earthRadius = 6378137.0
         val deltaLat = (deltaYMeters / earthRadius) * (180.0 / Math.PI)
-        val deltaLng = (deltaXMeters / (earthRadius * cos(Math.toRadians(lat)))) * (180.0 / Math.PI)
+        val deltaLng = (deltaXMeters / (earthRadius * cos(Math.toRadians(currentLat)))) * (180.0 / Math.PI)
 
-        currentLat = lat + deltaLat
-        currentLng = lng + deltaLng
+        currentLat += deltaLat
+        currentLng += deltaLng
 
-        if (isMocking) {
-            MockLocationService.start(this, currentLat!!, currentLng!!, "微調移動後")
-        }
-        updateStatusAndMap("微調移動後的位置")
+        MockLocationService.startFixed(this, currentLat, currentLng, "微調移動")
+        updateMapAndStatus("微調移動")
     }
 
-    private fun updateStatusAndMap(locationName: String) {
-        val lat = currentLat ?: return
-        val lng = currentLng ?: return
+    private fun updateMapAndStatus(statusText: String) {
+        textStatus.text = "模擬中 [$statusText]\n座標: %.5f, %.5f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
 
-        textStatus.text = "前景常駐模擬中...\n位置: $locationName\n緯度: %.6f, 經度: %.6f".format(lat, lng)
-
-        val geoPoint = GeoPoint(lat, lng)
+        val geoPoint = GeoPoint(currentLat, currentLng)
         mapView.controller.setCenter(geoPoint)
 
-        if (marker == null) {
-            marker = Marker(mapView)
-            marker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            mapView.overlays.add(marker)
+        if (currentMarker == null) {
+            currentMarker = Marker(mapView)
+            currentMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            mapView.overlays.add(currentMarker)
         }
-        marker?.position = geoPoint
-        marker?.title = "目前模擬位置"
+        currentMarker?.position = geoPoint
+        currentMarker?.title = "目前位置"
         mapView.invalidate()
-    }
-
-    private fun startMocking(locationName: String) {
-        val lat = currentLat ?: return
-        val lng = currentLng ?: return
-        isMocking = true
-        btnSet.text = "停止模擬定位"
-        MockLocationService.start(this, lat, lng, locationName)
-    }
-
-    private fun stopMocking() {
-        isMocking = false
-        btnSet.text = "搜尋並修改定位"
-        textStatus.text = "已停止模擬位置"
-        MockLocationService.stop(this)
-        Toast.makeText(this, "已停止背景模擬服務", Toast.LENGTH_SHORT).show()
-    }
-
-    // 自動回復背景服務傳回的最新座標與狀態
-    private fun restoreServiceState() {
-        val prefs = getSharedPreferences("ServiceState", Context.MODE_PRIVATE)
-        val mocking = prefs.getBoolean("is_mocking", false)
-        if (mocking) {
-            val latStr = prefs.getString("active_lat", null)
-            val lngStr = prefs.getString("active_lng", null)
-            val name = prefs.getString("active_name", "自訂位置") ?: "自訂位置"
-
-            val lat = latStr?.toDoubleOrNull()
-            val lng = lngStr?.toDoubleOrNull()
-
-            if (lat != null && lng != null) {
-                currentLat = lat
-                currentLng = lng
-                isMocking = true
-                btnSet.text = "停止模擬定位"
-                updateStatusAndMap(name)
-            }
-        }
     }
 
     override fun onResume() {
         super.onResume()
         mapView.onResume()
-        restoreServiceState()
+        val filter = IntentFilter().apply {
+            addAction(MockLocationService.ACTION_LOCATION_UPDATED)
+            addAction(MockLocationService.ACTION_NAV_FINISHED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(locationReceiver, filter, RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(locationReceiver, filter)
+        }
     }
 
     override fun onPause() {
         super.onPause()
         mapView.onPause()
+        try {
+            unregisterReceiver(locationReceiver)
+        } catch (e: Exception) {
+            // 忽略
+        }
     }
 }
