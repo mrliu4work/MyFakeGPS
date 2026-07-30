@@ -13,6 +13,7 @@
         android:allowBackup="true"
         android:label="MyFakeGPS"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
         
         <activity
@@ -24,7 +25,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 前景服務宣告 -->
         <service
             android:name=".MockLocationService"
             android:enabled="true"
