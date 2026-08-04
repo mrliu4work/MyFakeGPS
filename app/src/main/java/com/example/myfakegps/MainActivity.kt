@@ -92,6 +92,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 載入與設定 OSMDroid 設定，修復圖資載入封鎖
+        Configuration.getInstance().load(this, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
 
@@ -123,8 +125,8 @@ class MainActivity : AppCompatActivity() {
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
-        // 地圖預設縮放級別放大 3 級 (從 17.0 提升至 20.0)
-        mapView.controller.setZoom(20.0)
+        // 使用安全之最大高解析度縮放層級 18.0 (19 為極限，20 會導至 404/圖資無畫面)
+        mapView.controller.setZoom(18.0)
 
         setupMapEventsOverlay()
         setupSpeedControls()
