@@ -123,7 +123,8 @@ class MainActivity : AppCompatActivity() {
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
-        mapView.controller.setZoom(17.0)
+        // 地圖預設縮放級別放大 3 級 (從 17.0 提升至 20.0)
+        mapView.controller.setZoom(20.0)
 
         setupMapEventsOverlay()
         setupSpeedControls()
@@ -160,7 +161,6 @@ class MainActivity : AppCompatActivity() {
         setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔", "東京塔")
         setupFavorite(findViewById(R.id.btnFav4), "fav_4", "鐵塔", "埃菲爾鐵塔")
 
-        // 速度快捷鍵切換 (10 / 30 / 50 km/h)
         btnSpeed10.setOnClickListener { setSpeedValue(10) }
         btnSpeed30.setOnClickListener { setSpeedValue(30) }
         btnSpeed50.setOnClickListener { setSpeedValue(50) }
@@ -439,7 +439,7 @@ class MainActivity : AppCompatActivity() {
         var savedQuery = prefs.getString("${slotKey}_query", defaultQuery) ?: defaultQuery
 
         val updateButtonLabel = {
-            val displayLabel = if (savedName.length > 6) savedName.take(5) + "…" else savedName
+            val displayLabel = if (savedName.length > 8) savedName.take(7) + "…" else savedName
             button.text = "★ $displayLabel"
         }
 
