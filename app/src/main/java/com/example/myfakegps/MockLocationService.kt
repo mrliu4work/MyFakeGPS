@@ -33,6 +33,7 @@ class MockLocationService : Service() {
     private var mode: String = MODE_FIXED
     private var locationName: String = "預設位置"
     private var isMocking = false
+    private var isRouteFetching = false // 網路請求路徑鎖
 
     private val polyline = mutableListOf<GeoPoint>()
     private var routeIndex = 0
@@ -105,6 +106,7 @@ class MockLocationService : Service() {
         } else if (mode == MODE_FIXED) {
             polyline.clear()
             routeIndex = 0
+            isRouteFetching = false
             startMockingLoop()
         }
 
@@ -119,8 +121,12 @@ class MockLocationService : Service() {
         }
     }
 
-    // 重構修正後的沿著 Polyline 推進演算法 (以當前實時座標為基準)
     private fun stepAlongPolyline() {
+        // 若還在向網路請求路線，暫不執行步進與抵達判定
+        if (isRouteFetching) {
+            return
+        }
+
         if (polyline.isEmpty() || routeIndex >= polyline.size) {
             if (mode == MODE_RANDOM) {
                 fetchNextRandomRouteAndStart()
@@ -131,20 +137,18 @@ class MockLocationService : Service() {
             return
         }
 
-        var stepMeters = (speedKmH * 1000.0) / 3600.0 // 當前秒數應移動的距離 (公尺)
+        var stepMeters = (speedKmH * 1000.0) / 3600.0
 
         while (stepMeters > 0 && routeIndex < polyline.size) {
             val targetPoint = polyline[routeIndex]
             val distToTarget = distanceBetween(currentLat, currentLng, targetPoint.latitude, targetPoint.longitude)
 
             if (distToTarget <= stepMeters) {
-                // 當前距離小於當秒步長：直接踏上目標點，並扣除已走距離，前進至下一個節點
                 stepMeters -= distToTarget
                 currentLat = targetPoint.latitude
                 currentLng = targetPoint.longitude
                 routeIndex++
             } else {
-                // 朝目標點推進相對比例
                 val ratio = stepMeters / distToTarget
                 currentLat += ratio * (targetPoint.latitude - currentLat)
                 currentLng += ratio * (targetPoint.longitude - currentLng)
@@ -154,6 +158,7 @@ class MockLocationService : Service() {
     }
 
     private fun fetchRouteAndStart(destLat: Double, destLng: Double) {
+        isRouteFetching = true
         Thread {
             val points = fetchOsrmRoute(currentLat, currentLng, destLat, destLng)
             handler.post {
@@ -165,6 +170,7 @@ class MockLocationService : Service() {
                     polyline.add(GeoPoint(destLat, destLng))
                 }
                 routeIndex = 0
+                isRouteFetching = false
                 startMockingLoop()
             }
         }.start()
@@ -196,7 +202,7 @@ class MockLocationService : Service() {
             conn.requestMethod = "GET"
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
-            conn.setRequestProperty("User-Agent", "MyFakeGPSApp/1.0 (Android; com.example.myfakegps)")
+            conn.setRequestProperty("User-Agent", "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)")
 
             if (conn.responseCode == 200) {
                 val responseText = conn.inputStream.bufferedReader().readText()
@@ -278,6 +284,7 @@ class MockLocationService : Service() {
 
     private fun stopMockingService() {
         isMocking = false
+        isRouteFetching = false
         handler.removeCallbacks(updateRunnable)
         for (provider in providers) {
             try {
@@ -309,7 +316,7 @@ class MockLocationService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "模擬定位服務",
+                "GPS Debugger 服務",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "提供背景常駐廣播模擬定位"
@@ -329,7 +336,7 @@ class MockLocationService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MyFakeGPS $titleText")
+            .setContentTitle("GPS Debugger $titleText")
             .setContentText("座標: %.5f, %.5f | 速度: %.1f km/h".format(lat, lng, speedKmH))
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
