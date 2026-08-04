@@ -29,11 +29,11 @@ class MockLocationService : Service() {
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
-    private var speedKmH: Double = 5.0
+    private var speedKmH: Double = 10.0
     private var mode: String = MODE_FIXED
     private var locationName: String = "預設位置"
     private var isMocking = false
-    private var isRouteFetching = false // 網路請求路徑鎖
+    private var isRouteFetching = false
 
     private val polyline = mutableListOf<GeoPoint>()
     private var routeIndex = 0
@@ -122,7 +122,6 @@ class MockLocationService : Service() {
     }
 
     private fun stepAlongPolyline() {
-        // 若還在向網路請求路線，暫不執行步進與抵達判定
         if (isRouteFetching) {
             return
         }

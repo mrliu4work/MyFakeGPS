@@ -47,7 +47,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggleMock: Button
     private lateinit var btnToggleWander: Button
     private lateinit var btnNavToMapTap: Button
+    private lateinit var btnClearMapTap: Button
     private lateinit var btnCopyCoords: Button
+    private lateinit var btnRecenter: Button
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
@@ -72,17 +74,13 @@ class MainActivity : AppCompatActivity() {
                     isMockingOn = true
                     isWanderingOn = (mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV)
                     updateUIState(mode)
-                    updateMapAndStatus("模擬中 ($mode)")
+                    updateMapAndStatus("模擬中 ($mode)", shouldCenter = false)
                 }
                 MockLocationService.ACTION_NAV_FINISHED -> {
                     Toast.makeText(this@MainActivity, "🏁 抵達目的地，導航結束！", Toast.LENGTH_LONG).show()
                     isWanderingOn = false
                     updateUIState(MockLocationService.MODE_FIXED)
-                    if (targetMarker != null) {
-                        mapView.overlays.remove(targetMarker)
-                        targetMarker = null
-                        mapView.invalidate()
-                    }
+                    clearTargetMarker()
                 }
             }
         }
@@ -104,7 +102,9 @@ class MainActivity : AppCompatActivity() {
         btnToggleMock = findViewById(R.id.btnToggleMock)
         btnToggleWander = findViewById(R.id.btnToggleWander)
         btnNavToMapTap = findViewById(R.id.btnNavToMapTap)
+        btnClearMapTap = findViewById(R.id.btnClearMapTap)
         btnCopyCoords = findViewById(R.id.btnCopyCoords)
+        btnRecenter = findViewById(R.id.btnRecenter)
 
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
@@ -128,6 +128,7 @@ class MainActivity : AppCompatActivity() {
 
         editSearch.setOnClickListener { editSearch.selectAll() }
 
+        // 一鍵複製座標
         btnCopyCoords.setOnClickListener {
             val coordsStr = String.format(Locale.US, "%.6f, %.6f", currentLat, currentLng)
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -136,7 +137,19 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "📋 已複製經緯度: $coordsStr", Toast.LENGTH_SHORT).show()
         }
 
-        // 單純貼上文字，不自動發動搜尋傳送
+        // 移回當前位置
+        btnRecenter.setOnClickListener {
+            mapView.controller.animateTo(GeoPoint(currentLat, currentLng))
+            Toast.makeText(this, "🎯 鏡頭已對準當前位置", Toast.LENGTH_SHORT).show()
+        }
+
+        // 清除地圖選點
+        btnClearMapTap.setOnClickListener {
+            clearTargetMarker()
+            Toast.makeText(this, "已清除地圖目標點", Toast.LENGTH_SHORT).show()
+        }
+
+        // 僅貼上文字
         btnPaste.setOnClickListener {
             val text = getClipboardText()
             if (!text.isNullOrEmpty()) {
@@ -230,6 +243,19 @@ class MainActivity : AppCompatActivity() {
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
     }
 
+    private fun clearTargetMarker() {
+        if (targetMarker != null) {
+            mapView.overlays.remove(targetMarker)
+            targetMarker = null
+        }
+        mapTappedLat = null
+        mapTappedLng = null
+        textMapSelected.text = "地圖點擊選點：點擊地圖設置標記"
+        btnNavToMapTap.isEnabled = false
+        btnClearMapTap.isEnabled = false
+        mapView.invalidate()
+    }
+
     private fun updateUIState(mode: String) {
         if (!isMockingOn) {
             btnToggleMock.text = "▶ 開啟模擬定位"
@@ -259,16 +285,16 @@ class MainActivity : AppCompatActivity() {
 
                     textMapSelected.text = "已選點: %.5f, %.5f".format(it.latitude, it.longitude)
                     btnNavToMapTap.isEnabled = true
+                    btnClearMapTap.isEnabled = true
 
                     if (targetMarker == null) {
                         targetMarker = Marker(mapView)
                         targetMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
-                        // 著色目標 Marker 為藍色
                         val defaultIcon = ContextCompat.getDrawable(this@MainActivity, org.osmdroid.library.R.drawable.marker_default)?.mutate()
                         if (defaultIcon != null) {
                             val tintedIcon = DrawableCompat.wrap(defaultIcon)
-                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0")) // 鮮藍色 Pin
+                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0")) // 藍色 Marker
                             targetMarker?.icon = tintedIcon
                         }
 
@@ -307,7 +333,7 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                val spd = s.toString().toIntOrNull() ?: 5
+                val spd = s.toString().toIntOrNull() ?: 10
                 if (seekSpeed.progress != spd) {
                     seekSpeed.progress = spd.coerceIn(1, 50)
                 }
@@ -319,7 +345,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getSpeed(): Double {
-        return editSpeed.text.toString().toDoubleOrNull() ?: 5.0
+        return editSpeed.text.toString().toDoubleOrNull() ?: 10.0
     }
 
     private fun getClipboardText(): String? {
@@ -379,7 +405,7 @@ class MainActivity : AppCompatActivity() {
                         isMockingOn = true
                         isWanderingOn = false
                         updateUIState(MockLocationService.MODE_FIXED)
-                        updateMapAndStatus(resolvedName)
+                        updateMapAndStatus(resolvedName, shouldCenter = true)
                         Toast.makeText(this@MainActivity, "📍 已定點傳送！", Toast.LENGTH_SHORT).show()
                     }
                 } else {
@@ -390,6 +416,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    // 我的最愛點擊僅帶入文字，不直接發動傳送
     private fun setupFavorite(button: Button, slotKey: String, defaultName: String, defaultQuery: String) {
         val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
         var savedName = prefs.getString("${slotKey}_name", defaultName) ?: defaultName
@@ -405,7 +432,7 @@ class MainActivity : AppCompatActivity() {
         button.setOnClickListener {
             editSearch.setText(savedQuery)
             editSearch.selectAll()
-            performLocationSearch(savedQuery, isNav = false)
+            Toast.makeText(this, "已帶入最愛: $savedName", Toast.LENGTH_SHORT).show()
         }
 
         button.setOnLongClickListener {
@@ -485,10 +512,10 @@ class MainActivity : AppCompatActivity() {
         isMockingOn = true
         isWanderingOn = false
         updateUIState(MockLocationService.MODE_FIXED)
-        updateMapAndStatus("微調移動")
+        updateMapAndStatus("微調移動", shouldCenter = false)
     }
 
-    private fun updateMapAndStatus(statusText: String) {
+    private fun updateMapAndStatus(statusText: String, shouldCenter: Boolean = false) {
         val stateLabel = when {
             !isMockingOn -> "已關閉模擬"
             isWanderingOn -> "漫步/導航中"
@@ -497,7 +524,11 @@ class MainActivity : AppCompatActivity() {
         textStatus.text = "狀態：[$stateLabel] $statusText\n座標: %.6f, %.6f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
 
         val geoPoint = GeoPoint(currentLat, currentLng)
-        mapView.controller.setCenter(geoPoint)
+
+        // 僅在點擊傳送或手動歸位時置中，漫步中不強行抓回鏡頭
+        if (shouldCenter) {
+            mapView.controller.setCenter(geoPoint)
+        }
 
         if (currentMarker == null) {
             currentMarker = Marker(mapView)
