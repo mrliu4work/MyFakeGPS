@@ -42,19 +42,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var editSpeed: EditText
     private lateinit var seekSpeed: SeekBar
     private lateinit var textStatus: TextView
-    private lateinit var textMapSelected: TextView
 
     private lateinit var btnToggleMock: Button
     private lateinit var btnToggleWander: Button
-    private lateinit var btnNavToMapTap: Button
     private lateinit var btnClearMapTap: Button
-    private lateinit var btnCopyCoords: Button
     private lateinit var btnRecenter: Button
+    private lateinit var btnSettings: Button
+
+    private lateinit var btnSpeed10: Button
+    private lateinit var btnSpeed30: Button
+    private lateinit var btnSpeed50: Button
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
-    private var mapTappedLat: Double? = null
-    private var mapTappedLng: Double? = null
+    private var targetLat: Double? = null
+    private var targetLng: Double? = null
+    private var targetName: String = ""
 
     private var isMockingOn = false
     private var isWanderingOn = false
@@ -97,21 +100,20 @@ class MainActivity : AppCompatActivity() {
         editSpeed = findViewById(R.id.editSpeed)
         seekSpeed = findViewById(R.id.seekSpeed)
         textStatus = findViewById(R.id.textStatus)
-        textMapSelected = findViewById(R.id.textMapSelected)
 
         btnToggleMock = findViewById(R.id.btnToggleMock)
         btnToggleWander = findViewById(R.id.btnToggleWander)
-        btnNavToMapTap = findViewById(R.id.btnNavToMapTap)
         btnClearMapTap = findViewById(R.id.btnClearMapTap)
-        btnCopyCoords = findViewById(R.id.btnCopyCoords)
         btnRecenter = findViewById(R.id.btnRecenter)
+        btnSettings = findViewById(R.id.btnSettings)
+
+        btnSpeed10 = findViewById(R.id.btnSpeed10)
+        btnSpeed30 = findViewById(R.id.btnSpeed30)
+        btnSpeed50 = findViewById(R.id.btnSpeed50)
 
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
         val btnPaste = findViewById<Button>(R.id.btnPaste)
-
-        val btnOpenDev = findViewById<Button>(R.id.btnOpenDevSettings)
-        val btnOpenAppInfo = findViewById<Button>(R.id.btnOpenAppInfo)
 
         val btnNorth = findViewById<Button>(R.id.btnNorth)
         val btnSouth = findViewById<Button>(R.id.btnSouth)
@@ -128,28 +130,20 @@ class MainActivity : AppCompatActivity() {
 
         editSearch.setOnClickListener { editSearch.selectAll() }
 
-        // 一鍵複製座標
-        btnCopyCoords.setOnClickListener {
-            val coordsStr = String.format(Locale.US, "%.6f, %.6f", currentLat, currentLng)
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Coordinates", coordsStr)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, "📋 已複製經緯度: $coordsStr", Toast.LENGTH_SHORT).show()
+        btnSettings.setOnClickListener {
+            showSettingsMenuDialog()
         }
 
-        // 移回當前位置
         btnRecenter.setOnClickListener {
             mapView.controller.animateTo(GeoPoint(currentLat, currentLng))
-            Toast.makeText(this, "🎯 鏡頭已對準當前位置", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🎯 已對準當前位置", Toast.LENGTH_SHORT).show()
         }
 
-        // 清除地圖選點
         btnClearMapTap.setOnClickListener {
             clearTargetMarker()
             Toast.makeText(this, "已清除地圖目標點", Toast.LENGTH_SHORT).show()
         }
 
-        // 僅貼上文字
         btnPaste.setOnClickListener {
             val text = getClipboardText()
             if (!text.isNullOrEmpty()) {
@@ -166,23 +160,10 @@ class MainActivity : AppCompatActivity() {
         setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔", "東京塔")
         setupFavorite(findViewById(R.id.btnFav4), "fav_4", "鐵塔", "埃菲爾鐵塔")
 
-        btnOpenDev.setOnClickListener {
-            try {
-                startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-            } catch (e: Exception) {
-                Toast.makeText(this, "無法開啟開發者選項: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        btnOpenAppInfo.setOnClickListener {
-            try {
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", packageName, null)
-                })
-            } catch (e: Exception) {
-                Toast.makeText(this, "無法開啟應用程式資訊: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+        // 速度快捷鍵切換 (10 / 30 / 50 km/h)
+        btnSpeed10.setOnClickListener { setSpeedValue(10) }
+        btnSpeed30.setOnClickListener { setSpeedValue(30) }
+        btnSpeed50.setOnClickListener { setSpeedValue(50) }
 
         btnToggleMock.setOnClickListener {
             if (isMockingOn) {
@@ -226,21 +207,58 @@ class MainActivity : AppCompatActivity() {
             performLocationSearch(inputText, isNav = true)
         }
 
-        btnNavToMapTap.setOnClickListener {
-            if (mapTappedLat != null && mapTappedLng != null) {
-                val speed = getSpeed()
-                MockLocationService.startNav(this, currentLat, currentLng, mapTappedLat!!, mapTappedLng!!, speed, "地圖點標記")
-                isMockingOn = true
-                isWanderingOn = true
-                updateUIState(MockLocationService.MODE_NAV)
-                Toast.makeText(this, "🚩 開始導航至地圖點！", Toast.LENGTH_SHORT).show()
-            }
-        }
-
         btnNorth.setOnClickListener { moveLocation(0.0, getDistanceStep()) }
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
+    }
+
+    private fun setSpeedValue(spd: Int) {
+        editSpeed.setText(spd.toString())
+        seekSpeed.progress = spd.coerceIn(1, 50)
+        if (isMockingOn) {
+            MockLocationService.updateSpeed(this, spd.toDouble())
+        }
+    }
+
+    private fun showSettingsMenuDialog() {
+        val options = arrayOf(
+            "🛠️ 選取模擬位置設定 (開發者選項)",
+            "🔋 應用程式電池用量",
+            "📋 複製當前經緯度 (%.6f, %.6f)".format(currentLat, currentLng)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("⚙️ GPS Debugger 設定選單")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        try {
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "無法開啟開發者選項: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    1 -> {
+                        try {
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", packageName, null)
+                            })
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "無法開啟應用程式資訊: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    2 -> {
+                        val coordsStr = String.format(Locale.US, "%.6f, %.6f", currentLat, currentLng)
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Coordinates", coordsStr)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(this, "📋 已複製經緯度: $coordsStr", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("關閉", null)
+            .show()
     }
 
     private fun clearTargetMarker() {
@@ -248,10 +266,9 @@ class MainActivity : AppCompatActivity() {
             mapView.overlays.remove(targetMarker)
             targetMarker = null
         }
-        mapTappedLat = null
-        mapTappedLng = null
-        textMapSelected.text = "地圖點擊選點：點擊地圖設置標記"
-        btnNavToMapTap.isEnabled = false
+        targetLat = null
+        targetLng = null
+        targetName = ""
         btnClearMapTap.isEnabled = false
         mapView.invalidate()
     }
@@ -280,11 +297,11 @@ class MainActivity : AppCompatActivity() {
         val receiver = object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                 p?.let {
-                    mapTappedLat = it.latitude
-                    mapTappedLng = it.longitude
+                    targetLat = it.latitude
+                    targetLng = it.longitude
+                    targetName = "地圖標記點"
 
-                    textMapSelected.text = "已選點: %.5f, %.5f".format(it.latitude, it.longitude)
-                    btnNavToMapTap.isEnabled = true
+                    editSearch.setText("%.5f, %.5f".format(it.latitude, it.longitude))
                     btnClearMapTap.isEnabled = true
 
                     if (targetMarker == null) {
@@ -294,7 +311,7 @@ class MainActivity : AppCompatActivity() {
                         val defaultIcon = ContextCompat.getDrawable(this@MainActivity, org.osmdroid.library.R.drawable.marker_default)?.mutate()
                         if (defaultIcon != null) {
                             val tintedIcon = DrawableCompat.wrap(defaultIcon)
-                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0")) // 藍色 Marker
+                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0"))
                             targetMarker?.icon = tintedIcon
                         }
 
@@ -406,7 +423,7 @@ class MainActivity : AppCompatActivity() {
                         isWanderingOn = false
                         updateUIState(MockLocationService.MODE_FIXED)
                         updateMapAndStatus(resolvedName, shouldCenter = true)
-                        Toast.makeText(this@MainActivity, "📍 已定點傳送！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "📍 已傳送至: $resolvedName", Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     textStatus.text = "無法解析該地點"
@@ -416,7 +433,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // 我的最愛點擊僅帶入文字，不直接發動傳送
     private fun setupFavorite(button: Button, slotKey: String, defaultName: String, defaultQuery: String) {
         val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
         var savedName = prefs.getString("${slotKey}_name", defaultName) ?: defaultName
@@ -525,7 +541,6 @@ class MainActivity : AppCompatActivity() {
 
         val geoPoint = GeoPoint(currentLat, currentLng)
 
-        // 僅在點擊傳送或手動歸位時置中，漫步中不強行抓回鏡頭
         if (shouldCenter) {
             mapView.controller.setCenter(geoPoint)
         }
