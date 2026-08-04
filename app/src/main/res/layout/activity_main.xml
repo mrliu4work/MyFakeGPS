@@ -1,25 +1,208 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:padding="12dp">
 
-    <LinearLayout
+    <!-- 頂欄：標題與設定齒輪 -->
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_marginBottom="8dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="GPS Debugger"
-            android:textSize="22sp"
+            android:textSize="20sp"
             android:textStyle="bold"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="8dp"/>
+            android:layout_centerVertical="true"/>
 
-        <!-- 捷徑按鈕區 -->
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="⚙️ 設定"
+            android:textSize="11sp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"/>
+    </RelativeLayout>
+
+    <!-- 浮動搜尋列 (內建貼上按鈕) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <EditText
+            android:id="@+id/editSearch"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="🔍 搜尋地點、Plus Code 或經緯度"
+            android:inputType="textMultiLine"
+            android:selectAllOnFocus="true"
+            android:lines="1"
+            android:textSize="13sp"/>
+
+        <Button
+            android:id="@+id/btnPaste"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="📋 貼上"
+            android:textSize="11sp"
+            android:layout_marginStart="4dp"/>
+    </LinearLayout>
+
+    <!-- 最愛標籤區 (橫向滑動 Chips) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:layout_marginBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnFav1"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:textSize="10sp"
+                android:layout_marginEnd="4dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"/>
+
+            <Button
+                android:id="@+id/btnFav2"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:textSize="10sp"
+                android:layout_marginEnd="4dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"/>
+
+            <Button
+                android:id="@+id/btnFav3"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:textSize="10sp"
+                android:layout_marginEnd="4dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"/>
+
+            <Button
+                android:id="@+id/btnFav4"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:textSize="10sp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"/>
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- 主地圖容器 (包含左下角浮動 D-pad 十字鍵與右下角歸位) -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="8dp">
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+
+        <!-- 左下角浮動 D-pad (手動方向微調) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="8dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#A0FFFFFF"
+            android:padding="4dp">
+
+            <Button
+                android:id="@+id/btnNorth"
+                android:layout_width="40dp"
+                android:layout_height="32dp"
+                android:text="▲"
+                android:padding="0dp"
+                android:textSize="10sp"/>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnWest"
+                    android:layout_width="40dp"
+                    android:layout_height="32dp"
+                    android:text="◄"
+                    android:padding="0dp"
+                    android:textSize="10sp"/>
+
+                <Button
+                    android:id="@+id/btnEast"
+                    android:layout_width="40dp"
+                    android:layout_height="32dp"
+                    android:text="►"
+                    android:padding="0dp"
+                    android:textSize="10sp"/>
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnSouth"
+                android:layout_width="40dp"
+                android:layout_height="32dp"
+                android:text="▼"
+                android:padding="0dp"
+                android:textSize="10sp"/>
+        </LinearLayout>
+
+        <!-- 右下角浮動地圖控制 (🎯 歸位 & ❌ 清除) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="8dp"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btnRecenter"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="🎯 歸位"
+                android:textSize="10sp"
+                android:layout_marginBottom="4dp"/>
+
+            <Button
+                android:id="@+id/btnClearMapTap"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="❌ 清除"
+                android:textSize="10sp"
+                android:enabled="false"/>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 底部自適應操作面板 (Card) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:background="#F5F5F5">
+
+        <!-- 傳送與導航按鈕列 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -27,55 +210,24 @@
             android:layout_marginBottom="8dp">
 
             <Button
-                android:id="@+id/btnOpenDevSettings"
+                android:id="@+id/btnSetLocation"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="38dp"
                 android:layout_weight="1"
-                android:text="選取模擬位置設定"
+                android:text="📍 傳送至目標"
                 android:textSize="11sp"
                 android:layout_marginEnd="4dp"/>
 
             <Button
-                android:id="@+id/btnOpenAppInfo"
+                android:id="@+id/btnNavToSearch"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="38dp"
                 android:layout_weight="1"
-                android:text="應用程式電池用量"
-                android:textSize="11sp"
-                android:layout_marginStart="4dp"/>
+                android:text="🧭 導航至目標"
+                android:textSize="11sp"/>
         </LinearLayout>
 
-        <!-- 主開關區：模擬定位開關 vs 漫步開關 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <Button
-                android:id="@+id/btnToggleMock"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="▶ 開啟模擬定位"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2E7D32"
-                android:textColor="#FFFFFF"
-                android:layout_marginEnd="4dp"/>
-
-            <Button
-                android:id="@+id/btnToggleWander"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🎲 開始隨機漫步"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_marginStart="4dp"/>
-        </LinearLayout>
-
-        <!-- 速度控制區 (預設 10 km/h) -->
+        <!-- 速度快捷鍵與控制 (10 / 30 / 50 km/h) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -86,8 +238,35 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="漫步速度 (km/h): "
-                android:textSize="13sp"/>
+                android:text="速度: "
+                android:textSize="12sp"/>
+
+            <Button
+                android:id="@+id/btnSpeed10"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="🚶10"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="2dp"/>
+
+            <Button
+                android:id="@+id/btnSpeed30"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="🚴30"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="2dp"/>
+
+            <Button
+                android:id="@+id/btnSpeed50"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="🚗50"
+                android:textSize="10sp"
+                android:padding="0dp"
+                android:layout_marginEnd="4dp"/>
 
             <SeekBar
                 android:id="@+id/seekSpeed"
@@ -99,265 +278,60 @@
 
             <EditText
                 android:id="@+id/editSpeed"
-                android:layout_width="50dp"
+                android:layout_width="40dp"
                 android:layout_height="wrap_content"
                 android:text="10"
                 android:inputType="number"
                 android:gravity="center"
-                android:textSize="13sp"/>
+                android:textSize="12sp"/>
+
+            <!-- 隱藏的距離輸入框 (供微調讀取) -->
+            <EditText
+                android:id="@+id/editDistance"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:text="1"
+                android:visibility="gone"/>
         </LinearLayout>
 
-        <!-- 搜尋輸入框 -->
-        <EditText
-            android:id="@+id/editSearch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="輸入 Plus Code、地名 或 經緯度"
-            android:inputType="textMultiLine"
-            android:selectAllOnFocus="true"
-            android:lines="2"/>
-
-        <!-- 貼上、定點傳送、導航按鈕 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="4dp">
-
-            <Button
-                android:id="@+id/btnPaste"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📋 貼上"
-                android:textSize="11sp"
-                android:layout_marginEnd="4dp"/>
-
-            <Button
-                android:id="@+id/btnSetLocation"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="📍 傳送至輸入點"
-                android:textSize="11sp"
-                android:layout_marginEnd="4dp"/>
-
-            <Button
-                android:id="@+id/btnNavToSearch"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="🧭 導航至輸入點"
-                android:textSize="11sp"/>
-        </LinearLayout>
-
-        <!-- 我的最愛區 -->
+        <!-- 當前狀態列 -->
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/textStatus"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="★ 我的最愛 (點擊帶入文字，長按編輯名稱與地點):"
+            android:text="狀態：已關閉模擬定位"
             android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="2dp"/>
+            android:gravity="center"
+            android:layout_marginBottom="8dp"/>
 
+        <!-- 雙主要開關大按鈕：模擬定位開關 vs 漫步開關 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/btnFav1"
+                android:id="@+id/btnToggleMock"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:layout_weight="1"
-                android:textSize="10sp"
-                android:padding="0dp"
-                android:layout_marginEnd="2dp"/>
-
-            <Button
-                android:id="@+id/btnFav2"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:textSize="10sp"
-                android:padding="0dp"
-                android:layout_marginEnd="2dp"/>
-
-            <Button
-                android:id="@+id/btnFav3"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:textSize="10sp"
-                android:padding="0dp"
-                android:layout_marginEnd="2dp"/>
-
-            <Button
-                android:id="@+id/btnFav4"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:textSize="10sp"
-                android:padding="0dp"/>
-        </LinearLayout>
-
-        <!-- 微調控制 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="手動微調 (公尺): "
-                android:textSize="12sp"/>
-
-            <EditText
-                android:id="@+id/editDistance"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="1"
-                android:inputType="numberDecimal"
-                android:gravity="center"
-                android:textSize="12sp"/>
-        </LinearLayout>
-
-        <!-- 十字方向盤 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginTop="4dp">
-
-            <Button
-                android:id="@+id/btnNorth"
-                android:layout_width="60dp"
-                android:layout_height="36dp"
-                android:text="北 ▲"
-                android:padding="0dp"
-                android:textSize="11sp"/>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btnWest"
-                    android:layout_width="60dp"
-                    android:layout_height="36dp"
-                    android:text="◄ 西"
-                    android:padding="0dp"
-                    android:textSize="11sp"
-                    android:layout_marginEnd="16dp"/>
-
-                <Button
-                    android:id="@+id/btnEast"
-                    android:layout_width="60dp"
-                    android:layout_height="36dp"
-                    android:text="東 ►"
-                    android:padding="0dp"
-                    android:textSize="11sp"
-                    android:layout_marginStart="16dp"/>
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btnSouth"
-                android:layout_width="60dp"
-                android:layout_height="36dp"
-                android:text="▼ 南"
-                android:padding="0dp"
-                android:textSize="11sp"/>
-        </LinearLayout>
-
-        <!-- 當前狀態與複製/移回按鈕 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginTop="6dp">
-
-            <TextView
-                android:id="@+id/textStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="狀態：已關閉模擬定位"
+                android:text="▶ 開啟模擬定位"
                 android:textSize="12sp"
-                android:gravity="center"/>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="4dp">
-
-                <Button
-                    android:id="@+id/btnCopyCoords"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:text="📋 複製當前經緯度"
-                    android:textSize="11sp"
-                    android:paddingLeft="12dp"
-                    android:paddingRight="12dp"
-                    android:layout_marginEnd="8dp"/>
-
-                <Button
-                    android:id="@+id/btnRecenter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:text="🎯 移回當前位置"
-                    android:textSize="11sp"
-                    android:paddingLeft="12dp"
-                    android:paddingRight="12dp"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- 模式三：地圖點擊選點欄位 & 清除按鈕 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="6dp">
-
-            <TextView
-                android:id="@+id/textMapSelected"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="地圖點擊選點：點擊地圖設置標記"
-                android:textSize="11sp"/>
-
-            <Button
-                android:id="@+id/btnNavToMapTap"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🚩 導航至此點"
-                android:textSize="11sp"
-                android:enabled="false"
+                android:textStyle="bold"
+                android:backgroundTint="#2E7D32"
+                android:textColor="#FFFFFF"
                 android:layout_marginEnd="4dp"/>
 
             <Button
-                android:id="@+id/btnClearMapTap"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="❌ 清除"
-                android:textSize="11sp"
-                android:enabled="false"/>
+                android:id="@+id/btnToggleWander"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="🎲 開始隨機漫步"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginStart="4dp"/>
         </LinearLayout>
 
-        <!-- OpenStreetMap 地圖 -->
-        <org.osmdroid.views.MapView
-            android:id="@+id/mapView"
-            android:layout_width="match_parent"
-            android:layout_height="280dp"
-            android:layout_marginTop="6dp"/>
-
     </LinearLayout>
-</ScrollView>
+</LinearLayout>
