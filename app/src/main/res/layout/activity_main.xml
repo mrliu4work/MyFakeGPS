@@ -75,7 +75,7 @@
                 android:layout_marginStart="4dp"/>
         </LinearLayout>
 
-        <!-- 速度控制區 (Slider + Text) -->
+        <!-- 速度控制區 (預設 10 km/h) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -95,13 +95,13 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:max="50"
-                android:progress="5"/>
+                android:progress="10"/>
 
             <EditText
                 android:id="@+id/editSpeed"
                 android:layout_width="50dp"
                 android:layout_height="wrap_content"
-                android:text="5"
+                android:text="10"
                 android:inputType="number"
                 android:gravity="center"
                 android:textSize="13sp"/>
@@ -154,7 +154,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="★ 我的最愛 (點擊傳送，長按編輯名稱與地點):"
+            android:text="★ 我的最愛 (點擊帶入文字，長按編輯名稱與地點):"
             android:textSize="11sp"
             android:textStyle="bold"
             android:layout_marginTop="8dp"
@@ -275,7 +275,7 @@
                 android:textSize="11sp"/>
         </LinearLayout>
 
-        <!-- 當前狀態與一鍵複製座標按鈕 -->
+        <!-- 當前狀態與複製/移回按鈕 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -291,18 +291,34 @@
                 android:textSize="12sp"
                 android:gravity="center"/>
 
-            <Button
-                android:id="@+id/btnCopyCoords"
+            <LinearLayout
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="📋 複製當前經緯度"
-                android:textSize="11sp"
-                android:paddingLeft="12dp"
-                android:paddingRight="12dp"
-                android:layout_marginTop="4dp"/>
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp">
+
+                <Button
+                    android:id="@+id/btnCopyCoords"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="📋 複製當前經緯度"
+                    android:textSize="11sp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"
+                    android:layout_marginEnd="8dp"/>
+
+                <Button
+                    android:id="@+id/btnRecenter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="🎯 移回當前位置"
+                    android:textSize="11sp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- 模式三：地圖點擊選點欄位 -->
+        <!-- 模式三：地圖點擊選點欄位 & 清除按鈕 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -322,7 +338,16 @@
                 android:id="@+id/btnNavToMapTap"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🚩 導航至地圖點"
+                android:text="🚩 導航至此點"
+                android:textSize="11sp"
+                android:enabled="false"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btnClearMapTap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="❌ 清除"
                 android:textSize="11sp"
                 android:enabled="false"/>
         </LinearLayout>
