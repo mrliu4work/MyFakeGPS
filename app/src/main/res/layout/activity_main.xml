@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="MyFakeGPS 漫步導航版"
+            android:text="GPS Debugger"
             android:textSize="22sp"
             android:textStyle="bold"
             android:layout_gravity="center_horizontal"
@@ -154,7 +154,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="★ 我的最愛 (點擊傳送，長按從剪貼簿儲存):"
+            android:text="★ 我的最愛 (點擊傳送，長按編輯名稱與地點):"
             android:textSize="11sp"
             android:textStyle="bold"
             android:layout_marginTop="8dp"
@@ -275,14 +275,32 @@
                 android:textSize="11sp"/>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/textStatus"
+        <!-- 當前狀態與一鍵複製座標按鈕 -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="狀態：已關閉模擬定位"
-            android:textSize="12sp"
+            android:orientation="vertical"
             android:gravity="center"
-            android:layout_marginTop="6dp"/>
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:id="@+id/textStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="狀態：已關閉模擬定位"
+                android:textSize="12sp"
+                android:gravity="center"/>
+
+            <Button
+                android:id="@+id/btnCopyCoords"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="📋 複製當前經緯度"
+                android:textSize="11sp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:layout_marginTop="4dp"/>
+        </LinearLayout>
 
         <!-- 模式三：地圖點擊選點欄位 -->
         <LinearLayout

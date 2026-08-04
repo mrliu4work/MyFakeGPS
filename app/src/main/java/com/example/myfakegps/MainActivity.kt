@@ -1,6 +1,7 @@
 package com.example.myfakegps
 
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -15,10 +16,14 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -42,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggleMock: Button
     private lateinit var btnToggleWander: Button
     private lateinit var btnNavToMapTap: Button
+    private lateinit var btnCopyCoords: Button
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
@@ -66,7 +72,7 @@ class MainActivity : AppCompatActivity() {
                     isMockingOn = true
                     isWanderingOn = (mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV)
                     updateUIState(mode)
-                    updateMapAndStatus("移動中 ($mode)")
+                    updateMapAndStatus("模擬中 ($mode)")
                 }
                 MockLocationService.ACTION_NAV_FINISHED -> {
                     Toast.makeText(this@MainActivity, "🏁 抵達目的地，導航結束！", Toast.LENGTH_LONG).show()
@@ -85,7 +91,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Configuration.getInstance().userAgentValue = "MyFakeGPSApp/1.0 (Android; com.example.myfakegps)"
+        Configuration.getInstance().userAgentValue = "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
 
         editSearch = findViewById(R.id.editSearch)
@@ -98,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         btnToggleMock = findViewById(R.id.btnToggleMock)
         btnToggleWander = findViewById(R.id.btnToggleWander)
         btnNavToMapTap = findViewById(R.id.btnNavToMapTap)
+        btnCopyCoords = findViewById(R.id.btnCopyCoords)
 
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
@@ -121,21 +128,30 @@ class MainActivity : AppCompatActivity() {
 
         editSearch.setOnClickListener { editSearch.selectAll() }
 
+        btnCopyCoords.setOnClickListener {
+            val coordsStr = String.format(Locale.US, "%.6f, %.6f", currentLat, currentLng)
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Coordinates", coordsStr)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, "📋 已複製經緯度: $coordsStr", Toast.LENGTH_SHORT).show()
+        }
+
+        // 單純貼上文字，不自動發動搜尋傳送
         btnPaste.setOnClickListener {
             val text = getClipboardText()
             if (!text.isNullOrEmpty()) {
                 editSearch.setText(text)
                 editSearch.selectAll()
-                performLocationSearch(text, isNav = false)
+                Toast.makeText(this, "已貼上剪貼簿內容", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "剪貼簿為空", Toast.LENGTH_SHORT).show()
             }
         }
 
-        setupFavorite(findViewById(R.id.btnFav1), "fav_1", "CCM9+QMH Santorini")
-        setupFavorite(findViewById(R.id.btnFav2), "fav_2", "台北 101")
-        setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔")
-        setupFavorite(findViewById(R.id.btnFav4), "fav_4", "埃菲爾鐵塔")
+        setupFavorite(findViewById(R.id.btnFav1), "fav_1", "希臘", "CCM9+QMH Santorini")
+        setupFavorite(findViewById(R.id.btnFav2), "fav_2", "101", "台北 101")
+        setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔", "東京塔")
+        setupFavorite(findViewById(R.id.btnFav4), "fav_4", "鐵塔", "埃菲爾鐵塔")
 
         btnOpenDev.setOnClickListener {
             try {
@@ -247,6 +263,15 @@ class MainActivity : AppCompatActivity() {
                     if (targetMarker == null) {
                         targetMarker = Marker(mapView)
                         targetMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+
+                        // 著色目標 Marker 為藍色
+                        val defaultIcon = ContextCompat.getDrawable(this@MainActivity, org.osmdroid.library.R.drawable.marker_default)?.mutate()
+                        if (defaultIcon != null) {
+                            val tintedIcon = DrawableCompat.wrap(defaultIcon)
+                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0")) // 鮮藍色 Pin
+                            targetMarker?.icon = tintedIcon
+                        }
+
                         mapView.overlays.add(targetMarker)
                     }
                     targetMarker?.position = it
@@ -365,36 +390,83 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun setupFavorite(button: Button, slotKey: String, defaultValue: String) {
-        val prefs = getSharedPreferences("MyFakeGPSFavs", Context.MODE_PRIVATE)
-        var savedVal = prefs.getString(slotKey, defaultValue) ?: defaultValue
+    private fun setupFavorite(button: Button, slotKey: String, defaultName: String, defaultQuery: String) {
+        val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
+        var savedName = prefs.getString("${slotKey}_name", defaultName) ?: defaultName
+        var savedQuery = prefs.getString("${slotKey}_query", defaultQuery) ?: defaultQuery
 
         val updateButtonLabel = {
-            val displayLabel = if (savedVal.length > 7) savedVal.take(6) + "…" else savedVal
+            val displayLabel = if (savedName.length > 6) savedName.take(5) + "…" else savedName
             button.text = "★ $displayLabel"
         }
 
         updateButtonLabel()
 
         button.setOnClickListener {
-            editSearch.setText(savedVal)
+            editSearch.setText(savedQuery)
             editSearch.selectAll()
-            performLocationSearch(savedVal, isNav = false)
+            performLocationSearch(savedQuery, isNav = false)
         }
 
         button.setOnLongClickListener {
-            val clipText = getClipboardText()
-            if (!clipText.isNullOrEmpty()) {
-                savedVal = clipText
-                prefs.edit().putString(slotKey, savedVal).apply()
+            showEditFavoriteDialog(slotKey, button, savedName, savedQuery) { newName, newQuery ->
+                savedName = newName
+                savedQuery = newQuery
                 updateButtonLabel()
-                editSearch.setText(savedVal)
-                Toast.makeText(this, "已將剪貼簿內容儲存至最愛: $savedVal", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "剪貼簿為空，無法儲存至最愛", Toast.LENGTH_SHORT).show()
             }
             true
         }
+    }
+
+    private fun showEditFavoriteDialog(
+        slotKey: String,
+        button: Button,
+        currentName: String,
+        currentQuery: String,
+        onSaved: (String, String) -> Unit
+    ) {
+        val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
+        val clipText = getClipboardText() ?: ""
+        val initialQuery = if (currentQuery.isNotEmpty()) currentQuery else clipText
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+
+        val editName = EditText(this).apply {
+            hint = "請輸入顯示名稱 (例如: 聖托里尼)"
+            setText(currentName)
+        }
+
+        val editQuery = EditText(this).apply {
+            hint = "請輸入地點 / Plus Code / 經緯度"
+            setText(initialQuery)
+        }
+
+        layout.addView(editName)
+        layout.addView(editQuery)
+
+        AlertDialog.Builder(this)
+            .setTitle("✏️ 編輯我的最愛")
+            .setView(layout)
+            .setPositiveButton("儲存") { _, _ ->
+                val newName = editName.text.toString().trim()
+                val newQuery = editQuery.text.toString().trim()
+
+                if (newName.isNotEmpty() && newQuery.isNotEmpty()) {
+                    prefs.edit()
+                        .putString("${slotKey}_name", newName)
+                        .putString("${slotKey}_query", newQuery)
+                        .apply()
+                    onSaved(newName, newQuery)
+                    Toast.makeText(this, "已儲存最愛: $newName", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "名稱與地點不能為空", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun getDistanceStep(): Double {
@@ -422,7 +494,7 @@ class MainActivity : AppCompatActivity() {
             isWanderingOn -> "漫步/導航中"
             else -> "定點模擬中"
         }
-        textStatus.text = "狀態：[$stateLabel] $statusText\n座標: %.5f, %.5f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
+        textStatus.text = "狀態：[$stateLabel] $statusText\n座標: %.6f, %.6f | 速度: %s km/h".format(currentLat, currentLng, editSpeed.text)
 
         val geoPoint = GeoPoint(currentLat, currentLng)
         mapView.controller.setCenter(geoPoint)
