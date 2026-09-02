@@ -92,8 +92,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Configuration.getInstance().load(this, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = "GPSDebuggerApp/1.1 (Android; com.example.myfakegps)"
+        Configuration.getInstance().userAgentValue = "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
 
         editSearch = findViewById(R.id.editSearch)
@@ -124,7 +123,7 @@ class MainActivity : AppCompatActivity() {
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
-        mapView.controller.setZoom(18.0)
+        mapView.controller.setZoom(17.0)
 
         setupMapEventsOverlay()
         setupSpeedControls()
@@ -161,6 +160,7 @@ class MainActivity : AppCompatActivity() {
         setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔", "東京塔")
         setupFavorite(findViewById(R.id.btnFav4), "fav_4", "鐵塔", "埃菲爾鐵塔")
 
+        // 速度快捷鍵切換 (10 / 30 / 50 km/h)
         btnSpeed10.setOnClickListener { setSpeedValue(10) }
         btnSpeed30.setOnClickListener { setSpeedValue(30) }
         btnSpeed50.setOnClickListener { setSpeedValue(50) }
@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         AlertDialog.Builder(this)
-            .setTitle("⚙️ GPS Debugger v1.1 設定選單")
+            .setTitle("⚙️ GPS Debugger 設定選單")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
@@ -439,7 +439,7 @@ class MainActivity : AppCompatActivity() {
         var savedQuery = prefs.getString("${slotKey}_query", defaultQuery) ?: defaultQuery
 
         val updateButtonLabel = {
-            val displayLabel = if (savedName.length > 8) savedName.take(7) + "…" else savedName
+            val displayLabel = if (savedName.length > 6) savedName.take(5) + "…" else savedName
             button.text = "★ $displayLabel"
         }
 
