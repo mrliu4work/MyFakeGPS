@@ -62,7 +62,7 @@
                 android:layout_marginStart="6dp"/>
         </LinearLayout>
 
-        <!-- 最愛標籤區 (橫向滑動 Chips，擴充至 10 個) -->
+        <!-- 最愛標籤區 (橫向滑動 Chips，10 個) -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -165,7 +165,7 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- 主地圖容器 (高度增加 30% 至 494dp，大顯示區域) -->
+        <!-- 主地圖容器 (高度 494dp，大顯示區域) -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="494dp"
@@ -264,32 +264,7 @@
             android:padding="16dp"
             android:background="#F5F5F5">
 
-            <!-- 傳送與導航按鈕列 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="12dp">
-
-                <Button
-                    android:id="@+id/btnSetLocation"
-                    android:layout_width="0dp"
-                    android:layout_height="56dp"
-                    android:layout_weight="1"
-                    android:text="📍 傳送至目標"
-                    android:textSize="22sp"
-                    android:layout_marginEnd="6dp"/>
-
-                <Button
-                    android:id="@+id/btnNavToSearch"
-                    android:layout_width="0dp"
-                    android:layout_height="56dp"
-                    android:layout_weight="1"
-                    android:text="🧭 導航至目標"
-                    android:textSize="22sp"/>
-            </LinearLayout>
-
-            <!-- 速度快捷鍵與控制 (15 / 30 / 45 km/h) -->
+            <!-- 速度快捷鍵與控制 (15 / 30 / 45 km/h，共用) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -359,7 +334,7 @@
                     android:visibility="gone"/>
             </LinearLayout>
 
-            <!-- 當前狀態列 -->
+            <!-- 當前狀態列 (共用) -->
             <TextView
                 android:id="@+id/textStatus"
                 android:layout_width="match_parent"
@@ -369,33 +344,214 @@
                 android:gravity="center"
                 android:layout_marginBottom="12dp"/>
 
-            <!-- 雙主要開關大按鈕：模擬定位開關 vs 漫步開關 -->
+            <!-- 雙功能頁籤切換列 (Tab Segment) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
 
                 <Button
-                    android:id="@+id/btnToggleMock"
+                    android:id="@+id/btnTabSingle"
                     android:layout_width="0dp"
-                    android:layout_height="60dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
-                    android:text="▶ 開啟模擬定位"
-                    android:textSize="24sp"
+                    android:text="📍 單點 / 漫步"
+                    android:textSize="20sp"
                     android:textStyle="bold"
-                    android:backgroundTint="#2E7D32"
+                    android:backgroundTint="#1976D2"
                     android:textColor="#FFFFFF"
                     android:layout_marginEnd="6dp"/>
 
                 <Button
-                    android:id="@+id/btnToggleWander"
+                    android:id="@+id/btnTabPatrol"
                     android:layout_width="0dp"
-                    android:layout_height="60dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
-                    android:text="🎲 開始隨機漫步"
+                    android:text="🔄 路線巡航"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#CCCCCC"
+                    android:textColor="#333333"
+                    android:layout_marginStart="6dp"/>
+            </LinearLayout>
+
+            <!-- Tab 1: 單點與隨機漫步面板 -->
+            <LinearLayout
+                android:id="@+id/layoutTabSingle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="visible">
+
+                <!-- 傳送與導航按鈕列 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <Button
+                        android:id="@+id/btnSetLocation"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="📍 傳送至目標"
+                        android:textSize="22sp"
+                        android:layout_marginEnd="6dp"/>
+
+                    <Button
+                        android:id="@+id/btnNavToSearch"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="🧭 導航至目標"
+                        android:textSize="22sp"/>
+                </LinearLayout>
+
+                <!-- 雙主要開關大按鈕：模擬定位開關 vs 漫步開關 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnToggleMock"
+                        android:layout_width="0dp"
+                        android:layout_height="60dp"
+                        android:layout_weight="1"
+                        android:text="▶ 開啟模擬定位"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#2E7D32"
+                        android:textColor="#FFFFFF"
+                        android:layout_marginEnd="6dp"/>
+
+                    <Button
+                        android:id="@+id/btnToggleWander"
+                        android:layout_width="0dp"
+                        android:layout_height="60dp"
+                        android:layout_weight="1"
+                        android:text="🎲 開始隨機漫步"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#1976D2"
+                        android:textColor="#FFFFFF"
+                        android:layout_marginStart="6dp"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Tab 2: 路線循環巡航面板 -->
+            <LinearLayout
+                android:id="@+id/layoutTabPatrol"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 路線管理列 (下拉選單 + 儲存 + 刪除) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <Spinner
+                        android:id="@+id/spinnerRoutes"
+                        android:layout_width="0dp"
+                        android:layout_height="50dp"
+                        android:layout_weight="1"
+                        android:background="@android:drawable/btn_dropdown"
+                        android:layout_marginEnd="6dp"/>
+
+                    <Button
+                        android:id="@+id/btnSaveRoute"
+                        android:layout_width="wrap_content"
+                        android:layout_height="50dp"
+                        android:text="💾 儲存"
+                        android:textSize="20sp"
+                        android:layout_marginEnd="4dp"/>
+
+                    <Button
+                        android:id="@+id/btnDeleteRoute"
+                        android:layout_width="wrap_content"
+                        android:layout_height="50dp"
+                        android:text="🗑️ 刪除"
+                        android:textSize="20sp"/>
+                </LinearLayout>
+
+                <!-- 移動方式 (道路/直線) 與選點按鈕 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <RadioGroup
+                        android:id="@+id/rgPatrolType"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginEnd="8dp">
+
+                        <RadioButton
+                            android:id="@+id/rbRoad"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🚶道路"
+                            android:textSize="20sp"
+                            android:checked="true"
+                            android:layout_marginEnd="4dp"/>
+
+                        <RadioButton
+                            android:id="@+id/rbDirect"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="✈️直線"
+                            android:textSize="20sp"/>
+                    </RadioGroup>
+
+                    <Button
+                        android:id="@+id/btnPickOnMap"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="📍 選點 (開)"
+                        android:textSize="19sp"
+                        android:backgroundTint="#4CAF50"
+                        android:textColor="#FFFFFF"
+                        android:layout_marginEnd="4dp"/>
+
+                    <Button
+                        android:id="@+id/btnClearWaypoints"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="↺ 清空"
+                        android:textSize="19sp"/>
+                </LinearLayout>
+
+                <!-- 點位資訊狀態 -->
+                <TextView
+                    android:id="@+id/textPatrolPoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="已選點位: 0 個 (點擊地圖加入點位)"
+                    android:textSize="20sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="12dp"/>
+
+                <!-- 巡航啟動大按鈕 -->
+                <Button
+                    android:id="@+id/btnTogglePatrol"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:text="▶ 開始循環巡航"
                     android:textSize="24sp"
                     android:textStyle="bold"
-                    android:layout_marginStart="6dp"/>
+                    android:backgroundTint="#2E7D32"
+                    android:textColor="#FFFFFF"/>
             </LinearLayout>
 
         </LinearLayout>
