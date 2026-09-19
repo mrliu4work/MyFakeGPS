@@ -62,7 +62,7 @@
                 android:layout_marginStart="6dp"/>
         </LinearLayout>
 
-        <!-- 最愛標籤區 (橫向滑動 Chips) -->
+        <!-- 最愛標籤區 (橫向滑動 Chips，擴充至 10 個) -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -106,15 +106,69 @@
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
                     android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav6"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav7"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav8"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav9"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
+                    android:layout_marginEnd="6dp"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"/>
+
+                <Button
+                    android:id="@+id/btnFav10"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:textSize="20sp"
                     android:paddingLeft="12dp"
                     android:paddingRight="12dp"/>
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- 主地圖容器 (保持至少 380dp 大顯示區域不縮小) -->
+        <!-- 主地圖容器 (高度增加 30% 至 494dp，大顯示區域) -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="380dp"
+            android:layout_height="494dp"
             android:layout_marginBottom="12dp">
 
             <org.osmdroid.views.MapView
@@ -235,7 +289,7 @@
                     android:textSize="22sp"/>
             </LinearLayout>
 
-            <!-- 速度快捷鍵與控制 (10 / 30 / 50 km/h) -->
+            <!-- 速度快捷鍵與控制 (15 / 30 / 45 km/h) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -250,10 +304,10 @@
                     android:textSize="24sp"/>
 
                 <Button
-                    android:id="@+id/btnSpeed10"
+                    android:id="@+id/btnSpeed15"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:text="🚶10"
+                    android:text="🚶15"
                     android:textSize="20sp"
                     android:paddingLeft="8dp"
                     android:paddingRight="8dp"
@@ -270,10 +324,10 @@
                     android:layout_marginEnd="4dp"/>
 
                 <Button
-                    android:id="@+id/btnSpeed50"
+                    android:id="@+id/btnSpeed45"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:text="🚗50"
+                    android:text="🚗45"
                     android:textSize="20sp"
                     android:paddingLeft="8dp"
                     android:paddingRight="8dp"
@@ -285,13 +339,13 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:max="50"
-                    android:progress="10"/>
+                    android:progress="15"/>
 
                 <EditText
                     android:id="@+id/editSpeed"
                     android:layout_width="60dp"
                     android:layout_height="wrap_content"
-                    android:text="10"
+                    android:text="15"
                     android:inputType="number"
                     android:gravity="center"
                     android:textSize="24sp"/>

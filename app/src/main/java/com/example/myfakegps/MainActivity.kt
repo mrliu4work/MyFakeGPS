@@ -49,9 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRecenter: Button
     private lateinit var btnSettings: Button
 
-    private lateinit var btnSpeed10: Button
+    private lateinit var btnSpeed15: Button
     private lateinit var btnSpeed30: Button
-    private lateinit var btnSpeed50: Button
+    private lateinit var btnSpeed45: Button
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
@@ -107,9 +107,9 @@ class MainActivity : AppCompatActivity() {
         btnRecenter = findViewById(R.id.btnRecenter)
         btnSettings = findViewById(R.id.btnSettings)
 
-        btnSpeed10 = findViewById(R.id.btnSpeed10)
+        btnSpeed15 = findViewById(R.id.btnSpeed15)
         btnSpeed30 = findViewById(R.id.btnSpeed30)
-        btnSpeed50 = findViewById(R.id.btnSpeed50)
+        btnSpeed45 = findViewById(R.id.btnSpeed45)
 
         val btnSet = findViewById<Button>(R.id.btnSetLocation)
         val btnNavSearch = findViewById<Button>(R.id.btnNavToSearch)
@@ -155,15 +155,22 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        setupFavorite(findViewById(R.id.btnFav1), "fav_1", "希臘", "CCM9+QMH Santorini")
-        setupFavorite(findViewById(R.id.btnFav2), "fav_2", "101", "台北 101")
-        setupFavorite(findViewById(R.id.btnFav3), "fav_3", "東京塔", "東京塔")
-        setupFavorite(findViewById(R.id.btnFav4), "fav_4", "鐵塔", "埃菲爾鐵塔")
+        // 10 個快捷地點設定
+        setupFavorite(findViewById(R.id.btnFav1), "fav_1", "home", "2G25+6H 雙和里 新北市永和區")
+        setupFavorite(findViewById(R.id.btnFav2), "fav_2", "禾豐特區", "WGM6+G6R 華城里 新北市新店區")
+        setupFavorite(findViewById(R.id.btnFav3), "fav_3", "寶高", "G27V+RCM 布達佩斯 匈牙利")
+        setupFavorite(findViewById(R.id.btnFav4), "fav_4", "明信片", "2CHG+WGF 福營里 新北市新莊區")
+        setupFavorite(findViewById(R.id.btnFav5), "fav_5", "匈牙利", "G27V+RCM 布達佩斯 匈牙利")
+        setupFavorite(findViewById(R.id.btnFav6), "fav_6", "東京迪士尼", "35.632012, 139.880880")
+        setupFavorite(findViewById(R.id.btnFav7), "fav_7", "台北 101", "台北 101")
+        setupFavorite(findViewById(R.id.btnFav8), "fav_8", "(空)", "")
+        setupFavorite(findViewById(R.id.btnFav9), "fav_9", "(空)", "")
+        setupFavorite(findViewById(R.id.btnFav10), "fav_10", "(空)", "")
 
-        // 速度快捷鍵切換 (10 / 30 / 50 km/h)
-        btnSpeed10.setOnClickListener { setSpeedValue(10) }
+        // 速度快捷鍵切換 (15 / 30 / 45 km/h)
+        btnSpeed15.setOnClickListener { setSpeedValue(15) }
         btnSpeed30.setOnClickListener { setSpeedValue(30) }
-        btnSpeed50.setOnClickListener { setSpeedValue(50) }
+        btnSpeed45.setOnClickListener { setSpeedValue(45) }
 
         btnToggleMock.setOnClickListener {
             if (isMockingOn) {
@@ -350,7 +357,7 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                val spd = s.toString().toIntOrNull() ?: 10
+                val spd = s.toString().toIntOrNull() ?: 15
                 if (seekSpeed.progress != spd) {
                     seekSpeed.progress = spd.coerceIn(1, 50)
                 }
@@ -362,7 +369,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getSpeed(): Double {
-        return editSpeed.text.toString().toDoubleOrNull() ?: 10.0
+        return editSpeed.text.toString().toDoubleOrNull() ?: 15.0
     }
 
     private fun getClipboardText(): String? {
@@ -434,21 +441,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupFavorite(button: Button, slotKey: String, defaultName: String, defaultQuery: String) {
-        val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("GPSDebuggerFavs_v2", Context.MODE_PRIVATE)
         var savedName = prefs.getString("${slotKey}_name", defaultName) ?: defaultName
         var savedQuery = prefs.getString("${slotKey}_query", defaultQuery) ?: defaultQuery
 
         val updateButtonLabel = {
-            val displayLabel = if (savedName.length > 6) savedName.take(5) + "…" else savedName
-            button.text = "★ $displayLabel"
+            if (savedName.isEmpty() || savedName == "(空)") {
+                button.text = "★ (空)"
+            } else {
+                val displayLabel = if (savedName.length > 8) savedName.take(7) + "…" else savedName
+                button.text = "★ $displayLabel"
+            }
         }
 
         updateButtonLabel()
 
         button.setOnClickListener {
-            editSearch.setText(savedQuery)
-            editSearch.selectAll()
-            Toast.makeText(this, "已帶入最愛: $savedName", Toast.LENGTH_SHORT).show()
+            if (savedQuery.isNotEmpty()) {
+                editSearch.setText(savedQuery)
+                editSearch.selectAll()
+                Toast.makeText(this, "已帶入最愛: $savedName", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "尚未設定地點，長按或點擊設定", Toast.LENGTH_SHORT).show()
+                showEditFavoriteDialog(slotKey, button, savedName, savedQuery) { newName, newQuery ->
+                    savedName = newName
+                    savedQuery = newQuery
+                    updateButtonLabel()
+                }
+            }
         }
 
         button.setOnLongClickListener {
@@ -468,9 +488,10 @@ class MainActivity : AppCompatActivity() {
         currentQuery: String,
         onSaved: (String, String) -> Unit
     ) {
-        val prefs = getSharedPreferences("GPSDebuggerFavs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("GPSDebuggerFavs_v2", Context.MODE_PRIVATE)
         val clipText = getClipboardText() ?: ""
         val initialQuery = if (currentQuery.isNotEmpty()) currentQuery else clipText
+        val initialName = if (currentName == "(空)") "" else currentName
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -478,8 +499,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val editName = EditText(this).apply {
-            hint = "請輸入顯示名稱 (例如: 聖托里尼)"
-            setText(currentName)
+            hint = "請輸入顯示名稱 (例如: 公司)"
+            setText(initialName)
         }
 
         val editQuery = EditText(this).apply {
