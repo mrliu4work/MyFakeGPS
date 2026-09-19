@@ -14,16 +14,24 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.SeekBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -31,8 +39,23 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.cos
+
+data class RoutePoint(
+    val lat: Double,
+    val lng: Double,
+    val name: String = ""
+)
+
+data class SavedRoute(
+    val id: String,
+    val name: String,
+    val type: String, // "ROAD" or "DIRECT"
+    val points: List<RoutePoint>
+)
 
 class MainActivity : AppCompatActivity() {
 
@@ -43,6 +66,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var seekSpeed: SeekBar
     private lateinit var textStatus: TextView
 
+    // 雙頁籤控制項
+    private lateinit var btnTabSingle: Button
+    private lateinit var btnTabPatrol: Button
+    private lateinit var layoutTabSingle: LinearLayout
+    private lateinit var layoutTabPatrol: LinearLayout
+    private var isPatrolTabActive = false
+
+    // Tab 1: 單點與漫步控制項
     private lateinit var btnToggleMock: Button
     private lateinit var btnToggleWander: Button
     private lateinit var btnClearMapTap: Button
@@ -52,6 +83,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSpeed15: Button
     private lateinit var btnSpeed30: Button
     private lateinit var btnSpeed45: Button
+
+    // Tab 2: 巡航控制項
+    private lateinit var spinnerRoutes: Spinner
+    private lateinit var btnSaveRoute: Button
+    private lateinit var btnDeleteRoute: Button
+    private lateinit var rgPatrolType: RadioGroup
+    private lateinit var rbRoad: RadioButton
+    private lateinit var rbDirect: RadioButton
+    private lateinit var btnPickOnMap: Button
+    private lateinit var btnClearWaypoints: Button
+    private lateinit var textPatrolPoints: TextView
+    private lateinit var btnTogglePatrol: Button
+
+    private val currentPatrolPoints = mutableListOf<RoutePoint>()
+    private val savedRoutes = mutableListOf<SavedRoute>()
+    private val patrolMarkers = mutableListOf<Marker>()
+    private var patrolPolylineOverlay: Polyline? = null
+    private var isPickingWaypoints = true
+    private var isPatrolRunning = false
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
@@ -76,6 +126,7 @@ class MainActivity : AppCompatActivity() {
                     currentLng = lng
                     isMockingOn = true
                     isWanderingOn = (mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV)
+                    isPatrolRunning = (mode == MockLocationService.MODE_PATROL)
                     updateUIState(mode)
                     updateMapAndStatus("模擬中 ($mode)", shouldCenter = false)
                 }
@@ -84,6 +135,13 @@ class MainActivity : AppCompatActivity() {
                     isWanderingOn = false
                     updateUIState(MockLocationService.MODE_FIXED)
                     clearTargetMarker()
+                }
+                MockLocationService.ACTION_PATROL_ERROR -> {
+                    val errMsg = intent.getStringExtra(MockLocationService.EXTRA_ERROR_MSG) ?: "巡航規劃失敗"
+                    Toast.makeText(this@MainActivity, "❌ $errMsg", Toast.LENGTH_LONG).show()
+                    isPatrolRunning = false
+                    isMockingOn = false
+                    updateUIState(MockLocationService.MODE_FIXED)
                 }
             }
         }
@@ -95,12 +153,19 @@ class MainActivity : AppCompatActivity() {
         Configuration.getInstance().userAgentValue = "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)"
         setContentView(R.layout.activity_main)
 
+        // 綁定共用元件
         editSearch = findViewById(R.id.editSearch)
         editDistance = findViewById(R.id.editDistance)
         editSpeed = findViewById(R.id.editSpeed)
         seekSpeed = findViewById(R.id.seekSpeed)
         textStatus = findViewById(R.id.textStatus)
 
+        btnTabSingle = findViewById(R.id.btnTabSingle)
+        btnTabPatrol = findViewById(R.id.btnTabPatrol)
+        layoutTabSingle = findViewById(R.id.layoutTabSingle)
+        layoutTabPatrol = findViewById(R.id.layoutTabPatrol)
+
+        // Tab 1 元件
         btnToggleMock = findViewById(R.id.btnToggleMock)
         btnToggleWander = findViewById(R.id.btnToggleWander)
         btnClearMapTap = findViewById(R.id.btnClearMapTap)
@@ -120,6 +185,18 @@ class MainActivity : AppCompatActivity() {
         val btnEast = findViewById<Button>(R.id.btnEast)
         val btnWest = findViewById<Button>(R.id.btnWest)
 
+        // Tab 2 巡航元件
+        spinnerRoutes = findViewById(R.id.spinnerRoutes)
+        btnSaveRoute = findViewById(R.id.btnSaveRoute)
+        btnDeleteRoute = findViewById(R.id.btnDeleteRoute)
+        rgPatrolType = findViewById(R.id.rgPatrolType)
+        rbRoad = findViewById(R.id.rbRoad)
+        rbDirect = findViewById(R.id.rbDirect)
+        btnPickOnMap = findViewById(R.id.btnPickOnMap)
+        btnClearWaypoints = findViewById(R.id.btnClearWaypoints)
+        textPatrolPoints = findViewById(R.id.textPatrolPoints)
+        btnTogglePatrol = findViewById(R.id.btnTogglePatrol)
+
         mapView = findViewById(R.id.mapView)
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         mapView.setMultiTouchControls(true)
@@ -127,6 +204,8 @@ class MainActivity : AppCompatActivity() {
 
         setupMapEventsOverlay()
         setupSpeedControls()
+        setupTabs()
+        setupPatrolControls()
 
         editSearch.setOnClickListener { editSearch.selectAll() }
 
@@ -177,6 +256,7 @@ class MainActivity : AppCompatActivity() {
                 MockLocationService.stop(this)
                 isMockingOn = false
                 isWanderingOn = false
+                isPatrolRunning = false
                 updateUIState(MockLocationService.MODE_FIXED)
                 textStatus.text = "狀態：已關閉模擬定位"
                 Toast.makeText(this, "已關閉模擬定位", Toast.LENGTH_SHORT).show()
@@ -218,6 +298,301 @@ class MainActivity : AppCompatActivity() {
         btnSouth.setOnClickListener { moveLocation(0.0, -getDistanceStep()) }
         btnEast.setOnClickListener { moveLocation(getDistanceStep(), 0.0) }
         btnWest.setOnClickListener { moveLocation(-getDistanceStep(), 0.0) }
+    }
+
+    private fun setupTabs() {
+        btnTabSingle.setOnClickListener {
+            isPatrolTabActive = false
+            layoutTabSingle.visibility = View.VISIBLE
+            layoutTabPatrol.visibility = View.GONE
+            btnTabSingle.setBackgroundColor(Color.parseColor("#1976D2"))
+            btnTabSingle.setTextColor(Color.WHITE)
+            btnTabPatrol.setBackgroundColor(Color.parseColor("#E0E0E0"))
+            btnTabPatrol.setTextColor(Color.parseColor("#333333"))
+        }
+
+        btnTabPatrol.setOnClickListener {
+            isPatrolTabActive = true
+            layoutTabSingle.visibility = View.GONE
+            layoutTabPatrol.visibility = View.VISIBLE
+            btnTabPatrol.setBackgroundColor(Color.parseColor("#1976D2"))
+            btnTabPatrol.setTextColor(Color.WHITE)
+            btnTabSingle.setBackgroundColor(Color.parseColor("#E0E0E0"))
+            btnTabSingle.setTextColor(Color.parseColor("#333333"))
+            refreshPatrolMapOverlays()
+        }
+    }
+
+    private fun setupPatrolControls() {
+        loadSavedRoutesFromStorage()
+        updateRoutesSpinner()
+
+        btnPickOnMap.setOnClickListener {
+            isPickingWaypoints = !isPickingWaypoints
+            updatePickButtonState()
+        }
+
+        btnClearWaypoints.setOnClickListener {
+            currentPatrolPoints.clear()
+            refreshPatrolMapOverlays()
+            updatePatrolStatusText()
+            Toast.makeText(this, "已清空巡航點位", Toast.LENGTH_SHORT).show()
+        }
+
+        btnSaveRoute.setOnClickListener {
+            if (currentPatrolPoints.size < 2) {
+                Toast.makeText(this, "請至少在地圖上選取 2 個點再儲存！", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            showSaveRouteDialog()
+        }
+
+        btnDeleteRoute.setOnClickListener {
+            val selectedPos = spinnerRoutes.selectedItemPosition
+            if (selectedPos >= 0 && selectedPos < savedRoutes.size) {
+                val routeToDelete = savedRoutes[selectedPos]
+                AlertDialog.Builder(this)
+                    .setTitle("🗑️ 刪除路線")
+                    .setMessage("確定要刪除路線「${routeToDelete.name}」嗎？")
+                    .setPositiveButton("刪除") { _, _ ->
+                        savedRoutes.removeAt(selectedPos)
+                        saveRoutesToStorage()
+                        updateRoutesSpinner()
+                        currentPatrolPoints.clear()
+                        refreshPatrolMapOverlays()
+                        updatePatrolStatusText()
+                        Toast.makeText(this, "已刪除路線", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            } else {
+                Toast.makeText(this, "目前選取的不是已儲存路線", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnTogglePatrol.setOnClickListener {
+            if (isPatrolRunning) {
+                MockLocationService.stop(this)
+                isPatrolRunning = false
+                isMockingOn = false
+                updateUIState(MockLocationService.MODE_FIXED)
+                Toast.makeText(this, "⏹ 已停止循環巡航", Toast.LENGTH_SHORT).show()
+            } else {
+                if (currentPatrolPoints.size < 2) {
+                    Toast.makeText(this, "巡航至少需要 2 個點位！請點擊地圖加入點位。", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+
+                val type = if (rbRoad.isChecked) MockLocationService.PATROL_TYPE_ROAD else MockLocationService.PATROL_TYPE_DIRECT
+                val speed = getSpeed()
+                val lats = currentPatrolPoints.map { it.lat }.toDoubleArray()
+                val lngs = currentPatrolPoints.map { it.lng }.toDoubleArray()
+
+                val selectedPos = spinnerRoutes.selectedItemPosition
+                val routeName = if (selectedPos in 0 until savedRoutes.size) savedRoutes[selectedPos].name else "動態巡航"
+
+                MockLocationService.startPatrol(this, lats, lngs, type, speed, routeName)
+                isPatrolRunning = true
+                isMockingOn = true
+                updateUIState(MockLocationService.MODE_PATROL)
+                Toast.makeText(this, "▶ 開始循環巡航 (${if (type == MockLocationService.PATROL_TYPE_ROAD) "道路" else "直線"})！", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun updatePickButtonState() {
+        if (isPickingWaypoints) {
+            btnPickOnMap.text = "📍 選點 (開)"
+            btnPickOnMap.setBackgroundColor(Color.parseColor("#4CAF50"))
+        } else {
+            btnPickOnMap.text = "📍 選點 (關)"
+            btnPickOnMap.setBackgroundColor(Color.parseColor("#757575"))
+        }
+    }
+
+    private fun updatePatrolStatusText() {
+        val count = currentPatrolPoints.size
+        textPatrolPoints.text = "已選點位: $count 個 ${if (count >= 2) "(閉環循環中)" else "(至少需 2 點)"}"
+    }
+
+    private fun refreshPatrolMapOverlays() {
+        for (m in patrolMarkers) {
+            mapView.overlays.remove(m)
+        }
+        patrolMarkers.clear()
+
+        patrolPolylineOverlay?.let {
+            mapView.overlays.remove(it)
+            patrolPolylineOverlay = null
+        }
+
+        for ((index, pt) in currentPatrolPoints.withIndex()) {
+            val marker = Marker(mapView).apply {
+                position = GeoPoint(pt.lat, pt.lng)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                title = if (pt.name.isNotEmpty()) pt.name else "巡航點 #${index + 1}"
+            }
+            patrolMarkers.add(marker)
+            mapView.overlays.add(marker)
+        }
+
+        if (currentPatrolPoints.size >= 2) {
+            val loopPoints = currentPatrolPoints.map { GeoPoint(it.lat, it.lng) }.toMutableList()
+            loopPoints.add(GeoPoint(currentPatrolPoints[0].lat, currentPatrolPoints[0].lng)) // 閉環連線
+
+            val polyline = Polyline(mapView).apply {
+                setPoints(loopPoints)
+                outlinePaint.color = if (rbRoad.isChecked) Color.parseColor("#1565C0") else Color.parseColor("#E65100")
+                outlinePaint.strokeWidth = 7f
+            }
+            patrolPolylineOverlay = polyline
+            mapView.overlays.add(0, polyline)
+        }
+
+        mapView.invalidate()
+    }
+
+    private fun loadSavedRoutesFromStorage() {
+        savedRoutes.clear()
+        val prefs = getSharedPreferences("GPSDebuggerRoutes", Context.MODE_PRIVATE)
+        val jsonStr = prefs.getString("routes_list", null)
+
+        if (!jsonStr.isNullOrEmpty()) {
+            try {
+                val array = JSONArray(jsonStr)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val id = obj.optString("id", UUID.randomUUID().toString())
+                    val name = obj.getString("name")
+                    val type = obj.optString("type", MockLocationService.PATROL_TYPE_ROAD)
+                    val ptsArray = obj.getJSONArray("points")
+                    val pts = mutableListOf<RoutePoint>()
+                    for (j in 0 until ptsArray.length()) {
+                        val pObj = ptsArray.getJSONObject(j)
+                        pts.add(RoutePoint(pObj.getDouble("lat"), pObj.getDouble("lng"), pObj.optString("name", "")))
+                    }
+                    savedRoutes.add(SavedRoute(id, name, type, pts))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 若無任何存檔，提供一條預設示範路線
+        if (savedRoutes.isEmpty()) {
+            savedRoutes.add(
+                SavedRoute(
+                    id = "sample_route_1",
+                    name = "永和雙和里巡迴",
+                    type = MockLocationService.PATROL_TYPE_ROAD,
+                    points = listOf(
+                        RoutePoint(25.0081, 121.5123, "雙和里1"),
+                        RoutePoint(25.0125, 121.5160, "雙和里2"),
+                        RoutePoint(25.0070, 121.5200, "雙和里3")
+                    )
+                )
+            )
+            saveRoutesToStorage()
+        }
+    }
+
+    private fun saveRoutesToStorage() {
+        val array = JSONArray()
+        for (r in savedRoutes) {
+            val obj = JSONObject().apply {
+                put("id", r.id)
+                put("name", r.name)
+                put("type", r.type)
+                val ptsArray = JSONArray()
+                for (p in r.points) {
+                    val pObj = JSONObject().apply {
+                        put("lat", p.lat)
+                        put("lng", p.lng)
+                        put("name", p.name)
+                    }
+                    ptsArray.put(pObj)
+                }
+                put("points", ptsArray)
+            }
+            array.put(obj)
+        }
+        getSharedPreferences("GPSDebuggerRoutes", Context.MODE_PRIVATE)
+            .edit()
+            .putString("routes_list", array.toString())
+            .apply()
+    }
+
+    private fun updateRoutesSpinner() {
+        val items = savedRoutes.map { it.name }.toMutableList()
+        items.add("➕ [新建自訂路線]")
+
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        spinnerRoutes.adapter = adapter
+
+        spinnerRoutes.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position in 0 until savedRoutes.size) {
+                    val selected = savedRoutes[position]
+                    currentPatrolPoints.clear()
+                    currentPatrolPoints.addAll(selected.points)
+                    if (selected.type == MockLocationService.PATROL_TYPE_DIRECT) {
+                        rbDirect.isChecked = true
+                    } else {
+                        rbRoad.isChecked = true
+                    }
+                    refreshPatrolMapOverlays()
+                    updatePatrolStatusText()
+                    if (currentPatrolPoints.isNotEmpty()) {
+                        mapView.controller.animateTo(GeoPoint(currentPatrolPoints[0].lat, currentPatrolPoints[0].lng))
+                    }
+                } else {
+                    currentPatrolPoints.clear()
+                    refreshPatrolMapOverlays()
+                    updatePatrolStatusText()
+                    isPickingWaypoints = true
+                    updatePickButtonState()
+                    Toast.makeText(this@MainActivity, "請點擊地圖加入巡航點位", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun showSaveRouteDialog() {
+        val input = EditText(this).apply {
+            hint = "請輸入路線名稱 (例如: 公司周邊巡航)"
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+            addView(input)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("💾 儲存巡航路線")
+            .setView(layout)
+            .setPositiveButton("儲存") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    val type = if (rbRoad.isChecked) MockLocationService.PATROL_TYPE_ROAD else MockLocationService.PATROL_TYPE_DIRECT
+                    val newRoute = SavedRoute(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        type = type,
+                        points = currentPatrolPoints.toList()
+                    )
+                    savedRoutes.add(newRoute)
+                    saveRoutesToStorage()
+                    updateRoutesSpinner()
+                    spinnerRoutes.setSelection(savedRoutes.size - 1)
+                    Toast.makeText(this, "已成功儲存路線: $name", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "路線名稱不能為空", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun setSpeedValue(spd: Int) {
@@ -286,16 +661,29 @@ class MainActivity : AppCompatActivity() {
             btnToggleMock.setBackgroundColor(Color.parseColor("#2E7D32"))
             btnToggleWander.text = "🎲 開始隨機漫步"
             btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
+            btnTogglePatrol.text = "▶ 開始循環巡航"
+            btnTogglePatrol.setBackgroundColor(Color.parseColor("#2E7D32"))
         } else {
-            btnToggleMock.text = "⏹ 關閉模擬定位"
-            btnToggleMock.setBackgroundColor(Color.parseColor("#D32F2F"))
-
-            if (isWanderingOn || mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV) {
-                btnToggleWander.text = "⏸ 停止漫步/導航"
-                btnToggleWander.setBackgroundColor(Color.parseColor("#F57C00"))
-            } else {
+            if (mode == MockLocationService.MODE_PATROL) {
+                btnTogglePatrol.text = "⏹ 停止循環巡航"
+                btnTogglePatrol.setBackgroundColor(Color.parseColor("#D32F2F"))
+                btnToggleMock.text = "▶ 開啟模擬定位"
+                btnToggleMock.setBackgroundColor(Color.parseColor("#2E7D32"))
                 btnToggleWander.text = "🎲 開始隨機漫步"
                 btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
+            } else {
+                btnTogglePatrol.text = "▶ 開始循環巡航"
+                btnTogglePatrol.setBackgroundColor(Color.parseColor("#2E7D32"))
+                btnToggleMock.text = "⏹ 關閉模擬定位"
+                btnToggleMock.setBackgroundColor(Color.parseColor("#D32F2F"))
+
+                if (isWanderingOn || mode == MockLocationService.MODE_RANDOM || mode == MockLocationService.MODE_NAV) {
+                    btnToggleWander.text = "⏸ 停止漫步/導航"
+                    btnToggleWander.setBackgroundColor(Color.parseColor("#F57C00"))
+                } else {
+                    btnToggleWander.text = "🎲 開始隨機漫步"
+                    btnToggleWander.setBackgroundColor(Color.parseColor("#1976D2"))
+                }
             }
         }
     }
@@ -304,29 +692,41 @@ class MainActivity : AppCompatActivity() {
         val receiver = object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
                 p?.let {
-                    targetLat = it.latitude
-                    targetLng = it.longitude
-                    targetName = "地圖標記點"
-
-                    editSearch.setText("%.5f, %.5f".format(it.latitude, it.longitude))
-                    btnClearMapTap.isEnabled = true
-
-                    if (targetMarker == null) {
-                        targetMarker = Marker(mapView)
-                        targetMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-
-                        val defaultIcon = ContextCompat.getDrawable(this@MainActivity, org.osmdroid.library.R.drawable.marker_default)?.mutate()
-                        if (defaultIcon != null) {
-                            val tintedIcon = DrawableCompat.wrap(defaultIcon)
-                            DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0"))
-                            targetMarker?.icon = tintedIcon
+                    if (isPatrolTabActive) {
+                        // 巡航 Tab：地圖選點
+                        if (isPickingWaypoints) {
+                            val newIdx = currentPatrolPoints.size + 1
+                            currentPatrolPoints.add(RoutePoint(it.latitude, it.longitude, "點 #$newIdx"))
+                            refreshPatrolMapOverlays()
+                            updatePatrolStatusText()
+                            Toast.makeText(this@MainActivity, "已新增巡航點 #$newIdx", Toast.LENGTH_SHORT).show()
                         }
+                    } else {
+                        // 單點 / 導航 Tab：標記目標點
+                        targetLat = it.latitude
+                        targetLng = it.longitude
+                        targetName = "地圖標記點"
 
-                        mapView.overlays.add(targetMarker)
+                        editSearch.setText("%.5f, %.5f".format(it.latitude, it.longitude))
+                        btnClearMapTap.isEnabled = true
+
+                        if (targetMarker == null) {
+                            targetMarker = Marker(mapView)
+                            targetMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+
+                            val defaultIcon = ContextCompat.getDrawable(this@MainActivity, org.osmdroid.library.R.drawable.marker_default)?.mutate()
+                            if (defaultIcon != null) {
+                                val tintedIcon = DrawableCompat.wrap(defaultIcon)
+                                DrawableCompat.setTint(tintedIcon, Color.parseColor("#1565C0"))
+                                targetMarker?.icon = tintedIcon
+                            }
+
+                            mapView.overlays.add(targetMarker)
+                        }
+                        targetMarker?.position = it
+                        targetMarker?.title = "目標導航點"
+                        mapView.invalidate()
                     }
-                    targetMarker?.position = it
-                    targetMarker?.title = "目標導航點"
-                    mapView.invalidate()
                 }
                 return true
             }
@@ -420,6 +820,7 @@ class MainActivity : AppCompatActivity() {
                         MockLocationService.startNav(this, currentLat, currentLng, lat!!, lng!!, speed, resolvedName)
                         isMockingOn = true
                         isWanderingOn = true
+                        isPatrolRunning = false
                         updateUIState(MockLocationService.MODE_NAV)
                         Toast.makeText(this@MainActivity, "🧭 開始導航至: $resolvedName", Toast.LENGTH_SHORT).show()
                     } else {
@@ -428,6 +829,7 @@ class MainActivity : AppCompatActivity() {
                         MockLocationService.startFixed(this, currentLat, currentLng, resolvedName)
                         isMockingOn = true
                         isWanderingOn = false
+                        isPatrolRunning = false
                         updateUIState(MockLocationService.MODE_FIXED)
                         updateMapAndStatus(resolvedName, shouldCenter = true)
                         Toast.makeText(this@MainActivity, "📍 已傳送至: $resolvedName", Toast.LENGTH_SHORT).show()
@@ -548,6 +950,7 @@ class MainActivity : AppCompatActivity() {
         MockLocationService.startFixed(this, currentLat, currentLng, "微調移動")
         isMockingOn = true
         isWanderingOn = false
+        isPatrolRunning = false
         updateUIState(MockLocationService.MODE_FIXED)
         updateMapAndStatus("微調移動", shouldCenter = false)
     }
@@ -555,6 +958,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateMapAndStatus(statusText: String, shouldCenter: Boolean = false) {
         val stateLabel = when {
             !isMockingOn -> "已關閉模擬"
+            isPatrolRunning -> "循環巡航中"
             isWanderingOn -> "漫步/導航中"
             else -> "定點模擬中"
         }
@@ -582,6 +986,7 @@ class MainActivity : AppCompatActivity() {
         val filter = IntentFilter().apply {
             addAction(MockLocationService.ACTION_LOCATION_UPDATED)
             addAction(MockLocationService.ACTION_NAV_FINISHED)
+            addAction(MockLocationService.ACTION_PATROL_ERROR)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(locationReceiver, filter, RECEIVER_EXPORTED)

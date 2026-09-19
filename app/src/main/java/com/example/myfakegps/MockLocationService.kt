@@ -35,6 +35,9 @@ class MockLocationService : Service() {
     private var isMocking = false
     private var isRouteFetching = false
 
+    private var patrolType: String = PATROL_TYPE_ROAD
+    private val patrolWaypoints = mutableListOf<GeoPoint>()
+
     private val polyline = mutableListOf<GeoPoint>()
     private var routeIndex = 0
 
@@ -47,7 +50,7 @@ class MockLocationService : Service() {
                     MODE_FIXED -> {
                         pushLocationToAllProviders(currentLat, currentLng)
                     }
-                    MODE_NAV, MODE_RANDOM -> {
+                    MODE_NAV, MODE_RANDOM, MODE_PATROL -> {
                         stepAlongPolyline()
                         pushLocationToAllProviders(currentLat, currentLng)
                     }
@@ -90,6 +93,7 @@ class MockLocationService : Service() {
             MODE_FIXED -> "定點模擬: $locationName"
             MODE_NAV -> "導航前往: $locationName"
             MODE_RANDOM -> "沿路隨機漫步中"
+            MODE_PATROL -> "循環巡航: $locationName"
             else -> "定位模擬中"
         }
 
@@ -108,6 +112,36 @@ class MockLocationService : Service() {
             routeIndex = 0
             isRouteFetching = false
             startMockingLoop()
+        } else if (mode == MODE_PATROL) {
+            patrolType = intent?.getStringExtra(EXTRA_PATROL_TYPE) ?: PATROL_TYPE_ROAD
+            val lats = intent?.getDoubleArrayExtra(EXTRA_PATROL_WAYPOINTS_LAT)
+            val lngs = intent?.getDoubleArrayExtra(EXTRA_PATROL_WAYPOINTS_LNG)
+            patrolWaypoints.clear()
+            if (lats != null && lngs != null && lats.size == lngs.size) {
+                for (i in lats.indices) {
+                    patrolWaypoints.add(GeoPoint(lats[i], lngs[i]))
+                }
+            }
+
+            if (patrolWaypoints.size < 2) {
+                broadcastPatrolError("巡航點位不足（至少需要 2 個點）")
+                stopMockingService()
+            } else {
+                currentLat = patrolWaypoints[0].latitude
+                currentLng = patrolWaypoints[0].longitude
+                if (patrolType == PATROL_TYPE_DIRECT) {
+                    // 直線模式：不經網路請求，直接將 N 個點連成閉環
+                    polyline.clear()
+                    polyline.addAll(patrolWaypoints)
+                    polyline.add(patrolWaypoints[0]) // 回到起點形成循環
+                    routeIndex = 0
+                    isRouteFetching = false
+                    startMockingLoop()
+                } else {
+                    // 道路模式：嚴格呼叫 OSRM 規劃道路，失敗即報錯，絕不 Fallback
+                    fetchPatrolRoadRouteAndStart(patrolWaypoints)
+                }
+            }
         }
 
         return START_STICKY
@@ -132,13 +166,23 @@ class MockLocationService : Service() {
             } else if (mode == MODE_NAV) {
                 mode = MODE_FIXED
                 broadcastNavFinished()
+            } else if (mode == MODE_PATROL) {
+                // 巡航模式：無窮循環
+                routeIndex = 0
             }
             return
         }
 
         var stepMeters = (speedKmH * 1000.0) / 3600.0
 
-        while (stepMeters > 0 && routeIndex < polyline.size) {
+        while (stepMeters > 0 && polyline.isNotEmpty()) {
+            if (routeIndex >= polyline.size) {
+                if (mode == MODE_PATROL) {
+                    routeIndex = 0
+                } else {
+                    break
+                }
+            }
             val targetPoint = polyline[routeIndex]
             val distToTarget = distanceBetween(currentLat, currentLng, targetPoint.latitude, targetPoint.longitude)
 
@@ -146,7 +190,7 @@ class MockLocationService : Service() {
                 stepMeters -= distToTarget
                 currentLat = targetPoint.latitude
                 currentLng = targetPoint.longitude
-                routeIndex++
+                routeIndex = if (mode == MODE_PATROL) (routeIndex + 1) % polyline.size else routeIndex + 1
             } else {
                 val ratio = stepMeters / distToTarget
                 currentLat += ratio * (targetPoint.latitude - currentLat)
@@ -175,6 +219,33 @@ class MockLocationService : Service() {
         }.start()
     }
 
+    private fun fetchPatrolRoadRouteAndStart(points: List<GeoPoint>) {
+        isRouteFetching = true
+        Thread {
+            val coordsBuilder = StringBuilder()
+            for (p in points) {
+                coordsBuilder.append(String.format(Locale.US, "%.6f,%.6f;", p.longitude, p.latitude))
+            }
+            coordsBuilder.append(String.format(Locale.US, "%.6f,%.6f", points[0].longitude, points[0].latitude))
+
+            val urlStr = "https://router.project-osrm.org/route/v1/foot/${coordsBuilder}?overview=full&geometries=geojson"
+            val routePoints = fetchOsrmMultiRoute(urlStr)
+            handler.post {
+                isRouteFetching = false
+                if (!routePoints.isNullOrEmpty()) {
+                    polyline.clear()
+                    polyline.addAll(routePoints)
+                    routeIndex = 0
+                    startMockingLoop()
+                } else {
+                    // 嚴格規則：絕不 Fallback 至直線，道路失敗即刻報錯並停止
+                    broadcastPatrolError("道路模式規劃失敗：無法在 OSRM 建立連通道路，請檢查點位是否皆在可通行道路上。")
+                    stopMockingService()
+                }
+            }
+        }.start()
+    }
+
     private fun fetchNextRandomRouteAndStart() {
         val randomAngle = Math.random() * 2 * Math.PI
         val randomDist = 300.0 + Math.random() * 300.0
@@ -190,17 +261,21 @@ class MockLocationService : Service() {
     }
 
     private fun fetchOsrmRoute(startLat: Double, startLng: Double, endLat: Double, endLng: Double): List<GeoPoint>? {
+        val urlStr = String.format(
+            Locale.US,
+            "https://router.project-osrm.org/route/v1/foot/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson",
+            startLng, startLat, endLng, endLat
+        )
+        return fetchOsrmMultiRoute(urlStr)
+    }
+
+    private fun fetchOsrmMultiRoute(urlStr: String): List<GeoPoint>? {
         return try {
-            val urlStr = String.format(
-                Locale.US,
-                "https://router.project-osrm.org/route/v1/foot/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson",
-                startLng, startLat, endLng, endLat
-            )
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
             conn.setRequestProperty("User-Agent", "GPSDebuggerApp/1.0 (Android; com.example.myfakegps)")
 
             if (conn.responseCode == 200) {
@@ -302,12 +377,20 @@ class MockLocationService : Service() {
             putExtra(EXTRA_LNG, currentLng)
             putExtra(EXTRA_MODE, mode)
             putExtra(EXTRA_IS_MOCKING, isMocking)
+            putExtra(EXTRA_NAME, locationName)
         }
         sendBroadcast(intent)
     }
 
     private fun broadcastNavFinished() {
         val intent = Intent(ACTION_NAV_FINISHED)
+        sendBroadcast(intent)
+    }
+
+    private fun broadcastPatrolError(errorMessage: String) {
+        val intent = Intent(ACTION_PATROL_ERROR).apply {
+            putExtra(EXTRA_ERROR_MSG, errorMessage)
+        }
         sendBroadcast(intent)
     }
 
@@ -363,13 +446,23 @@ class MockLocationService : Service() {
         const val EXTRA_NAME = "extra_name"
         const val EXTRA_IS_MOCKING = "extra_is_mocking"
 
+        const val EXTRA_PATROL_WAYPOINTS_LAT = "extra_patrol_waypoints_lat"
+        const val EXTRA_PATROL_WAYPOINTS_LNG = "extra_patrol_waypoints_lng"
+        const val EXTRA_PATROL_TYPE = "extra_patrol_type"
+        const val EXTRA_ERROR_MSG = "extra_error_msg"
+
+        const val PATROL_TYPE_ROAD = "ROAD"
+        const val PATROL_TYPE_DIRECT = "DIRECT"
+
         const val MODE_FIXED = "mode_fixed"
         const val MODE_NAV = "mode_nav"
         const val MODE_RANDOM = "mode_random"
+        const val MODE_PATROL = "mode_patrol"
 
         const val ACTION_STOP = "action_stop"
         const val ACTION_LOCATION_UPDATED = "com.example.myfakegps.LOCATION_UPDATED"
         const val ACTION_NAV_FINISHED = "com.example.myfakegps.NAV_FINISHED"
+        const val ACTION_PATROL_ERROR = "com.example.myfakegps.PATROL_ERROR"
 
         fun startFixed(context: Context, lat: Double, lng: Double, name: String) {
             val intent = Intent(context, MockLocationService::class.java).apply {
@@ -400,6 +493,25 @@ class MockLocationService : Service() {
                 putExtra(EXTRA_LAT, currentLat)
                 putExtra(EXTRA_LNG, currentLng)
                 putExtra(EXTRA_SPEED, speed)
+            }
+            startServiceIntent(context, intent)
+        }
+
+        fun startPatrol(
+            context: Context,
+            waypointsLat: DoubleArray,
+            waypointsLng: DoubleArray,
+            patrolType: String,
+            speed: Double,
+            routeName: String
+        ) {
+            val intent = Intent(context, MockLocationService::class.java).apply {
+                putExtra(EXTRA_MODE, MODE_PATROL)
+                putExtra(EXTRA_PATROL_WAYPOINTS_LAT, waypointsLat)
+                putExtra(EXTRA_PATROL_WAYPOINTS_LNG, waypointsLng)
+                putExtra(EXTRA_PATROL_TYPE, patrolType)
+                putExtra(EXTRA_SPEED, speed)
+                putExtra(EXTRA_NAME, routeName)
             }
             startServiceIntent(context, intent)
         }
