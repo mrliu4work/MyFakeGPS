@@ -29,7 +29,7 @@ class MockLocationService : Service() {
 
     private var currentLat: Double = 25.0339
     private var currentLng: Double = 121.5640
-    private var speedKmH: Double = 10.0
+    private var speedKmH: Double = 15.0
     private var mode: String = MODE_FIXED
     private var locationName: String = "預設位置"
     private var isMocking = false
